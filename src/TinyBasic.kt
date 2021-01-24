@@ -1,10 +1,46 @@
 
+import java.io.File
 import java.lang.IllegalStateException
 import java.util.*
 import kotlin.system.exitProcess
 
+/******************************************************************************
+ TinyBasic Interpreter
+
+ This was written as an exercise of manually writing TinyBasic interpreter.
+ ...and to work on my kotlin skills.
+
+ Here is the supported syntax in BNF form, adapted from wikipedia: https://en.wikipedia.org/wiki/Tiny_BASIC
+
+    line ::= number statement CR
+    statement ::=
+      PRINT (string | expression)
+      IF comparison THEN statement
+      GOTO expression
+      INPUT var
+      LET var = expression
+      GOSUB expression
+      RETURN
+      END
+    comparison ::= expression (("==" | "<>" | ">" | ">=" | "<" | "<=") expression)+
+    expression ::= term {( "-" | "+" ) term}
+    term ::= unary {( "/" | "*" ) unary}
+    unary ::= ["+" | "-"] primary
+    primary ::= number | ident
+
+ Some notes:
+ * Variables can only contain integer values, not strings.
+ * There is only integer values, not decimal values
+
+ In was written in a few hours, with help from:
+ https://web.eecs.utk.edu/~azh/blog/teenytinycompiler1.html
+ ******************************************************************************/
+
+
 /**
  * Tokenizer
+ *
+ * Gets a program text as input, and allows iterating over tokens.
  */
 class Lexer(private val program: String) {
 
@@ -61,7 +97,7 @@ class Lexer(private val program: String) {
           }
         }
       }
-      in '1'..'9' -> {
+      in '0'..'9' -> {
         val startPos = currentIndex
         while (peek().isDigit()) {
           // Get rest of number.
@@ -183,104 +219,11 @@ enum class TokenType(val isKeyword: Boolean) {
   SLASH(false)
 }
 
-data class AST(val lines: MutableSet<Line>)
-data class Line(val lineNumber: Int, val statement: Statement)
-interface Statement {
-  fun interpret(interpreter: Interpreter)
-}
-class Interpreter {
-  private var ast = AST(mutableSetOf())
-  private val variables: MutableMap<Char, Int> = mutableMapOf()
-  private var currentLineIndex = -1
-  private var jumpRequest: Int? = null
-  private var gosubRequest: Int? = null
-  private var returnAddresses = Stack<Int>()
-  private var returnRequest = false
-  private var endRequest = false
-
-  fun interpret(ast: AST) {
-    this.ast = ast
-    currentLineIndex = 0
-    do {
-      val line = ast.lines.elementAt(currentLineIndex)
-
-      println(line.lineNumber)
-
-      line.statement.interpret(this)
-
-      if (jumpRequest != null) {
-        currentLineIndex = getLineIndexByLineNumberOrDie(jumpRequest!!)
-        jumpRequest = null
-      } else if (gosubRequest != null) {
-        returnAddresses.push(currentLineIndex + 1)
-        currentLineIndex = getLineIndexByLineNumberOrDie(gosubRequest!!)
-        gosubRequest = null
-      } else if (returnRequest) {
-        currentLineIndex = returnAddresses.pop()
-        returnRequest = false
-      } else if (endRequest) {
-        break
-      } else {
-        // Just go to the next line.
-        currentLineIndex++
-        if (ast.lines.size == currentLineIndex) {
-          // Reached end of program, without hitting an "END" statement.
-          break;
-        }
-      }
-    } while (true)
-  }
-
-  private fun getLineIndexByLineNumberOrDie(lineNumber: Int) : Int {
-    for (i in 0 .. ast.lines.size) {
-      if (ast.lines.elementAt(i).lineNumber == lineNumber) {
-        return i
-      }
-    }
-    abort("Line number: $lineNumber not found")
-    return -1
-  }
-
-  private fun abort(message: String) {
-    println("$ast.lines. ERROR: $message")
-    exitProcess(1)
-  }
-
-  internal fun jump(lineNumber: Int) {
-    jumpRequest = lineNumber
-  }
-
-  internal fun jumpSubroutine(lineNumber: Int) {
-    gosubRequest = lineNumber
-  }
-
-  internal fun requestReturn() {
-    returnRequest = true
-  }
-
-  internal fun halt() {
-    endRequest = true
-  }
-
-  internal fun setVar(identifier: Char, value: Int) {
-    variables[identifier] = value
-  }
-
-  internal fun getVar(identifier: Char) : Int {
-    var result = variables[identifier]
-    if (result == null) {
-      abort("Referenced variable $identifier does not exist. use LET first")
-      return 0  // Unreachable, abort crashes.
-    }
-    return result
-  }
-
-}
 
 /**
  * Creates an AST from lexed code.
  */
-class Parser(val lexer: Lexer) {
+class Parser(private val lexer: Lexer) {
 
   var currentToken = Token("", TokenType.EOF, 0, 0)
   var lookAhead = Token("", TokenType.EOF, 0, 0)
@@ -288,6 +231,10 @@ class Parser(val lexer: Lexer) {
   init {
     nextToken()  // read current and next
   }
+
+  /**
+   * Main entry point, parses a program and creates and AST.
+   */
   fun parseProgram() : AST {
     val ast = AST(mutableSetOf())
     while (lexer.hasToken()) {
@@ -295,6 +242,9 @@ class Parser(val lexer: Lexer) {
     }
     return ast
   }
+
+  // Parse syntax elements, such as line, statement, expression, etc..
+
 
   private fun line() : Line {
     matchNext(TokenType.NUMBER)
@@ -366,9 +316,9 @@ class Parser(val lexer: Lexer) {
   }
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression) {
-    fun value(interpreter: Interpreter): Boolean {
-      val lvalue = lExpression.value(interpreter)
-      val rValue = rExpression.value(interpreter)
+    fun value(virtualMachine: VirtualMachine): Boolean {
+      val lvalue = lExpression.value(virtualMachine)
+      val rValue = rExpression.value(virtualMachine)
       when (relop.tokenType) {
         TokenType.GT -> return lvalue > rValue
         TokenType.GTEQ -> return lvalue >= rValue
@@ -436,17 +386,17 @@ class Parser(val lexer: Lexer) {
   }
 
   data class Primary(val primary: Token) {
-    fun value(interpreter: Interpreter) : Int {
+    fun value(virtualMachine: VirtualMachine) : Int {
       return when (primary.tokenType) {
-        TokenType.VAR -> interpreter.getVar(primary.string[0])
+        TokenType.VAR -> virtualMachine.getVar(primary.string[0])
         TokenType.NUMBER -> primary.string.toInt()
         else -> throw IllegalStateException("Invalid primary type: $primary")
       }
     }
   }
   data class Unary(val op: Token?, val primary: Primary) {
-    fun value(interpreter: Interpreter) : Int {
-      var value =  primary.value(interpreter)
+    fun value(virtualMachine: VirtualMachine) : Int {
+      var value =  primary.value(virtualMachine)
       if (op?.tokenType == TokenType.MINUS) {
         value *= -1
       }
@@ -455,13 +405,13 @@ class Parser(val lexer: Lexer) {
 
   }
   data class Term(val unary: Unary, val op: Token?, val rUnary: Unary?) {
-    fun value(interpreter: Interpreter) : Int {
-      var value = unary.value(interpreter)
+    fun value(virtualMachine: VirtualMachine) : Int {
+      var value = unary.value(virtualMachine)
       if (op != null) {
         value *= if (op.tokenType == TokenType.ASTERISK) {
-          rUnary!!.value(interpreter)
+          rUnary!!.value(virtualMachine)
         } else {
-          (1 / rUnary!!.value(interpreter))
+          (1 / rUnary!!.value(virtualMachine))
         }
       }
       return value
@@ -469,14 +419,14 @@ class Parser(val lexer: Lexer) {
     }
   }
   data class Expression(val term: Term, val op: Token?, val rTerm: Term?) {
-    fun value(interpreter: Interpreter) : Int {
+    fun value(virtualMachine: VirtualMachine) : Int {
 
-      var value = term.value(interpreter)
+      var value = term.value(virtualMachine)
       if (op != null && rTerm != null) {
         value += if (op.tokenType == TokenType.PLUS) {
-          rTerm.value(interpreter)
+          rTerm.value(virtualMachine)
         } else {
-          -rTerm.value(interpreter)
+          -rTerm.value(virtualMachine)
         }
       }
       return value
@@ -513,79 +463,10 @@ class Parser(val lexer: Lexer) {
       return if (isString()) string!! else expression!!.toString()
     }
 
-    fun value(interpreter: Interpreter): Any {
-      return if (isString()) string!! else expression!!.value(interpreter)
+    fun value(virtualMachine: VirtualMachine): Any {
+      return if (isString()) string!! else expression!!.value(virtualMachine)
     }
 
-  }
-
-
-  class ReturnStatement : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      interpreter.requestReturn()
-    }
-  }
-
-  class EndStatement : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      interpreter.halt()
-    }
-
-  }
-
-  class RemStatement : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      // Do nothing.
-    }
-
-  }
-
-  data class GosubStatement(val expression: Expression) : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      interpreter.jumpSubroutine(expression.value(interpreter))
-    }
-
-  }
-
-  data class LetStatement(val identifier: Token,
-                          val equals: Token,
-                          val expression: Expression) : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      interpreter.setVar(identifier.string[0], expression.value(interpreter))
-    }
-
-  }
-
-  data class InputStatement(val identifier: Token) : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      val value = readLine()!!
-      interpreter.setVar(identifier.string[0], value.toInt())
-    }
-
-  }
-
-  data class GotoStatement(val expression: Expression) : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      interpreter.jump(expression.value(interpreter))
-    }
-
-  }
-
-  data class IfStatement(val comparison: Comparison,
-                    val then: Token,
-                    val statement: Statement) : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      if (comparison.value(interpreter)) {
-        statement.interpret(interpreter)
-      }
-    }
-
-  }
-
-  data class PrintStatement(val stringOrExpression: StringOrExpression) : Statement {
-    override fun interpret(interpreter: Interpreter) {
-      println(stringOrExpression.value(interpreter))
-    }
   }
 
   private fun matchNext(tokenType: TokenType) {
@@ -613,41 +494,188 @@ class Parser(val lexer: Lexer) {
     exitProcess(0)
   }
 
+  /**
+   * Abstract sytax tree represents a program in an abstract object form.
+   * In BASIC this is a list of lines.
+   */
+  data class AST(val lines: MutableSet<Line>)
+
+  data class Line(val lineNumber: Int, val statement: Statement)
+
+  interface Statement {
+    fun interpret(virtualMachine: VirtualMachine)
+  }
+
+  class ReturnStatement : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      virtualMachine.requestReturn()
+    }
+  }
+
+  class EndStatement : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      virtualMachine.halt()
+    }
+
+  }
+
+  class RemStatement : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      // Do nothing.
+    }
+
+  }
+
+  data class GosubStatement(val expression: Expression) : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      virtualMachine.jumpSubroutine(expression.value(virtualMachine))
+    }
+
+  }
+
+  data class LetStatement(val identifier: Token,
+                          val equals: Token,
+                          val expression: Expression) : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      virtualMachine.setVar(identifier.string[0], expression.value(virtualMachine))
+    }
+
+  }
+
+  data class InputStatement(val identifier: Token) : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      val value = readLine()!!
+      virtualMachine.setVar(identifier.string[0], value.toInt())
+    }
+
+  }
+
+  data class GotoStatement(val expression: Expression) : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      virtualMachine.jump(expression.value(virtualMachine))
+    }
+
+  }
+
+  data class IfStatement(val comparison: Comparison,
+                    val then: Token,
+                    val statement: Statement) : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      if (comparison.value(virtualMachine)) {
+        statement.interpret(virtualMachine)
+      }
+    }
+
+  }
+
+  data class PrintStatement(val stringOrExpression: StringOrExpression) : Statement {
+    override fun interpret(virtualMachine: VirtualMachine) {
+      println(stringOrExpression.value(virtualMachine))
+    }
+  }
+
+
 }
 
-fun main() {
-  val program = """
-5 REM "***** My Program ****"
-10 PRINT "Hello, world!"
-15 PRINT 12987*99+15/3
-20 PRINT "what is your age?"
-40 INPUT N
-70 IF N>80 THEN PRINT "OLD"
-80 LET X=13
-90 PRINT X
-92 LET M=105
-95 GOTO M
-100 REM "this is a remark"
-105 PRINT "JUMPED TO HERE"
-110 GOSUB 1000
-120 PRINT "RETURNED"
-990 END
-1000 PRINT "got here"
-1010 RETURN
+class VirtualMachine {
+  private var ast = Parser.AST(mutableSetOf())
+  private val variables: MutableMap<Char, Int> = mutableMapOf()  // vars are single chars, only contain int values.
+  private var currentLineIndex = -1
 
-""".trimIndent()
+  private var jumpRequest: Int? = null  // null or line number of jump target
+  private var gosubRequest: Int? = null // null or line number of gosub target
+  private var returnAddresses = Stack<Int>()  // stach of addresses to 'RETURN' to.
+  private var returnRequest = false  // was a return was requested?
+  private var endRequest = false  // was an END requested?
+
+  fun interpret(ast: Parser.AST) {
+    this.ast = ast
+    currentLineIndex = 0
+    do {
+      val line = ast.lines.elementAt(currentLineIndex)
+
+      line.statement.interpret(this)
+
+      if (jumpRequest != null) {
+        currentLineIndex = getLineIndexByLineNumberOrDie(jumpRequest!!)
+        jumpRequest = null
+      } else if (gosubRequest != null) {
+        returnAddresses.push(currentLineIndex + 1)
+        currentLineIndex = getLineIndexByLineNumberOrDie(gosubRequest!!)
+        gosubRequest = null
+      } else if (returnRequest) {
+        currentLineIndex = returnAddresses.pop()
+        returnRequest = false
+      } else if (endRequest) {
+        break
+      } else {
+        // Just go to the next line.
+        currentLineIndex++
+        if (ast.lines.size == currentLineIndex) {
+          // Reached end of program, without hitting an "END" statement.
+          break
+        }
+      }
+    } while (true)
+  }
+
+  private fun getLineIndexByLineNumberOrDie(lineNumber: Int) : Int {
+    for (i in 0 .. ast.lines.size) {
+      if (ast.lines.elementAt(i).lineNumber == lineNumber) {
+        return i
+      }
+    }
+    abort("Line number: $lineNumber not found")
+    return -1
+  }
+
+  private fun abort(message: String) {
+    println("$ast.lines. ERROR: $message")
+    exitProcess(1)
+  }
+
+  internal fun jump(lineNumber: Int) {
+    jumpRequest = lineNumber
+  }
+
+  internal fun jumpSubroutine(lineNumber: Int) {
+    gosubRequest = lineNumber
+  }
+
+  internal fun requestReturn() {
+    returnRequest = true
+  }
+
+  internal fun halt() {
+    endRequest = true
+  }
+
+  internal fun setVar(identifier: Char, value: Int) {
+    variables[identifier] = value
+  }
+
+  internal fun getVar(identifier: Char) : Int {
+    val result = variables[identifier]
+    if (result == null) {
+      abort("Referenced variable $identifier does not exist. use LET first")
+      return 0  // Unreachable, abort crashes.
+    }
+    return result
+  }
+
+}
+
+
+fun main(args: Array<String>) {
+  if (args.size != 1) {
+    println("Usage: TinyBaseic <filename>")
+    exitProcess(1)
+  }
+  val program = File(args[0]).readText()
 
   val lexer = Lexer(program)
-//  while (lexer.hasToken()) {
-//    println(lexer.nextToken())
-//  }
   val ast = Parser(lexer).parseProgram()
-//  for (line in ast.lines) {
-//    println("${line.lineNumber}\t${line.statement}")
-//  }
 
-  val interpreter = Interpreter()
+  val interpreter = VirtualMachine()
   interpreter.interpret(ast)
 }
-// TODO:
-// * decimal numbers, not just integers
