@@ -16,6 +16,7 @@ Here is the supported syntax in BNF form, adapted from wikipedia: https://en.wik
       GOSUB expression
       RETURN
       END
+    var ::= A | B | C ... | Y | Z
     comparison ::= expression (("==" | "<>" | ">" | ">=" | "<" | "<=") expression)+
     expression ::= term {( "-" | "+" ) term}
     term ::= unary {( "/" | "*" ) unary}
