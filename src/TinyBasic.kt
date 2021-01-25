@@ -654,3 +654,10 @@ fun main(args: Array<String>) {
   val interpreter = VirtualMachine()
   interpreter.interpret(ast)
 }
+
+
+// TODO:
+// * expand to zx basic?
+// * rewrite with antlr?
+// * split to several files
+// * move "interpret()" to interpreter class
