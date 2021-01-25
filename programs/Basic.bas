@@ -1,4 +1,4 @@
-5 REM "***** My Program ****"
+5 REM ***** My Program ****
 10 PRINT "Hello, world!"
 15 PRINT 12987*99+15/3
 20 PRINT "what is your age?"
@@ -8,7 +8,7 @@
 90 PRINT X
 92 LET M=105
 95 GOTO M
-100 REM "this is a remark"
+100 REM this is a remark
 105 PRINT "JUMPED TO HERE"
 110 GOSUB 1000
 120 PRINT "RETURNED"

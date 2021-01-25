@@ -83,6 +83,12 @@ class Lexer(private val program: String) {
           if (keywordToken == null) {
             abort("Invalid keyword: $keyword")
           } else {
+            if (keywordToken == TokenType.REM) {
+              // Eat remark until end of line
+              while (peek() != '\n') {
+                nextChar()
+              }
+            }
             return newToken(keyword,  keywordToken)
           }
         } else {
