@@ -291,9 +291,9 @@ class Parser(private val lexer: Lexer) {
   }
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression) {
-    fun value(virtualMachine: VirtualMachine): Boolean {
-      val lvalue = lExpression.value(virtualMachine)
-      val rValue = rExpression.value(virtualMachine)
+    fun value(interpreter: Interpreter): Boolean {
+      val lvalue = lExpression.value(interpreter)
+      val rValue = rExpression.value(interpreter)
       when (relop.tokenType) {
         TokenType.GT -> return lvalue > rValue
         TokenType.GTEQ -> return lvalue >= rValue
@@ -361,17 +361,17 @@ class Parser(private val lexer: Lexer) {
   }
 
   data class Primary(val primary: Token) {
-    fun value(virtualMachine: VirtualMachine) : Int {
+    fun value(interpreter: Interpreter) : Int {
       return when (primary.tokenType) {
-        TokenType.VAR -> virtualMachine.getVar(primary.string[0])
+        TokenType.VAR -> interpreter.getVar(primary.string[0])
         TokenType.NUMBER -> primary.string.toInt()
         else -> throw IllegalStateException("Invalid primary type: $primary")
       }
     }
   }
   data class Unary(val op: Token?, val primary: Primary) {
-    fun value(virtualMachine: VirtualMachine) : Int {
-      var value =  primary.value(virtualMachine)
+    fun value(interpreter: Interpreter) : Int {
+      var value =  primary.value(interpreter)
       if (op?.tokenType == TokenType.MINUS) {
         value *= -1
       }
@@ -380,13 +380,13 @@ class Parser(private val lexer: Lexer) {
 
   }
   data class Term(val unary: Unary, val op: Token?, val rUnary: Unary?) {
-    fun value(virtualMachine: VirtualMachine) : Int {
-      var value = unary.value(virtualMachine)
+    fun value(interpreter: Interpreter) : Int {
+      var value = unary.value(interpreter)
       if (op != null) {
         value *= if (op.tokenType == TokenType.ASTERISK) {
-          rUnary!!.value(virtualMachine)
+          rUnary!!.value(interpreter)
         } else {
-          (1 / rUnary!!.value(virtualMachine))
+          (1 / rUnary!!.value(interpreter))
         }
       }
       return value
@@ -394,14 +394,14 @@ class Parser(private val lexer: Lexer) {
     }
   }
   data class Expression(val term: Term, val op: Token?, val rTerm: Term?) {
-    fun value(virtualMachine: VirtualMachine) : Int {
+    fun value(interpreter: Interpreter) : Int {
 
-      var value = term.value(virtualMachine)
+      var value = term.value(interpreter)
       if (op != null && rTerm != null) {
         value += if (op.tokenType == TokenType.PLUS) {
-          rTerm.value(virtualMachine)
+          rTerm.value(interpreter)
         } else {
-          -rTerm.value(virtualMachine)
+          -rTerm.value(interpreter)
         }
       }
       return value
@@ -438,8 +438,8 @@ class Parser(private val lexer: Lexer) {
       return if (isString()) string!! else expression!!.toString()
     }
 
-    fun value(virtualMachine: VirtualMachine): Any {
-      return if (isString()) string!! else expression!!.value(virtualMachine)
+    fun value(interpreter: Interpreter): Any {
+      return if (isString()) string!! else expression!!.value(interpreter)
     }
 
   }
@@ -477,121 +477,105 @@ class Parser(private val lexer: Lexer) {
 
   data class Line(val lineNumber: Int, val statement: Statement)
 
-  interface Statement {
-    fun interpret(virtualMachine: VirtualMachine)
-  }
-
-  class ReturnStatement : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      virtualMachine.requestReturn()
-    }
-  }
-
-  class EndStatement : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      virtualMachine.halt()
-    }
-
-  }
-
-  class RemStatement : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      // Do nothing.
-    }
-
-  }
-
-  data class GosubStatement(val expression: Expression) : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      virtualMachine.jumpSubroutine(expression.value(virtualMachine))
-    }
-
-  }
-
+  interface Statement
+  class ReturnStatement : Statement
+  class EndStatement : Statement
+  class RemStatement : Statement
+  data class GosubStatement(val expression: Expression) : Statement
   data class LetStatement(val identifier: Token,
                           val equals: Token,
-                          val expression: Expression) : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      virtualMachine.setVar(identifier.string[0], expression.value(virtualMachine))
-    }
+                          val expression: Expression) : Statement
 
-  }
-
-  data class InputStatement(val identifier: Token) : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      val value = readLine()!!
-      virtualMachine.setVar(identifier.string[0], value.toInt())
-    }
-
-  }
-
-  data class GotoStatement(val expression: Expression) : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      virtualMachine.jump(expression.value(virtualMachine))
-    }
-
-  }
-
+  data class InputStatement(val identifier: Token) : Statement
+  data class GotoStatement(val expression: Expression) : Statement
   data class IfStatement(val comparison: Comparison,
                     val then: Token,
-                    val statement: Statement) : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      if (comparison.value(virtualMachine)) {
-        statement.interpret(virtualMachine)
-      }
-    }
-
-  }
-
-  data class PrintStatement(val stringOrExpression: StringOrExpression) : Statement {
-    override fun interpret(virtualMachine: VirtualMachine) {
-      println(stringOrExpression.value(virtualMachine))
-    }
-  }
+                    val thenStatement: Statement) : Statement
+  data class PrintStatement(val stringOrExpression: StringOrExpression) : Statement
 
 
 }
 
-class VirtualMachine {
+class Interpreter {
   private var ast = Parser.AST(mutableSetOf())
   private val variables: MutableMap<Char, Int> = mutableMapOf()  // vars are single chars, only contain int values.
   private var currentLineIndex = -1
 
-  private var jumpRequest: Int? = null  // null or line number of jump target
-  private var gosubRequest: Int? = null // null or line number of gosub target
   private var returnAddresses = Stack<Int>()  // stach of addresses to 'RETURN' to.
-  private var returnRequest = false  // was a return was requested?
-  private var endRequest = false  // was an END requested?
 
-  fun interpret(ast: Parser.AST) {
+  fun run(ast: Parser.AST) {
     this.ast = ast
     currentLineIndex = 0
     do {
       val line = ast.lines.elementAt(currentLineIndex)
 
-      line.statement.interpret(this)
-
-      if (jumpRequest != null) {
-        currentLineIndex = getLineIndexByLineNumberOrDie(jumpRequest!!)
-        jumpRequest = null
-      } else if (gosubRequest != null) {
-        returnAddresses.push(currentLineIndex + 1)
-        currentLineIndex = getLineIndexByLineNumberOrDie(gosubRequest!!)
-        gosubRequest = null
-      } else if (returnRequest) {
-        currentLineIndex = returnAddresses.pop()
-        returnRequest = false
-      } else if (endRequest) {
+      if (evaluate(line.statement, ast)) {
         break
-      } else {
+      }
+
+    } while (true)
+  }
+
+  /**
+   * Evaluates given 'statement' returns true iff program should stop.
+   */
+  private fun evaluate(statement: Parser.Statement, ast: Parser.AST): Boolean {
+
+    // Handle statements.
+    when (statement) {
+
+      is Parser.PrintStatement -> {
+        println(statement.stringOrExpression.value(this))
+      }
+
+      is Parser.IfStatement -> {
+        if (statement.comparison.value(this)) {
+          return evaluate(statement.thenStatement, ast)
+        }
+      }
+
+      is Parser.LetStatement -> {
+        setVar(statement.identifier.string[0], statement.expression.value(this))
+      }
+
+      is Parser.InputStatement -> {
+        val value = readLine()!!
+        setVar(statement.identifier.string[0], value.toInt())
+      }
+    }
+
+    // Handle branching and line advancement statements.
+    when (statement) {
+
+      is Parser.GotoStatement -> {
+        val lineNumber = statement.expression.value(this)
+        currentLineIndex = getLineIndexByLineNumberOrDie(lineNumber)
+      }
+
+      is Parser.GosubStatement -> {
+        returnAddresses.push(currentLineIndex + 1)
+        val lineNumber = statement.expression.value(this)
+        currentLineIndex = getLineIndexByLineNumberOrDie(lineNumber)
+      }
+
+      is Parser.ReturnStatement -> {
+        currentLineIndex = returnAddresses.pop()
+      }
+
+      is Parser.EndStatement -> {
+        return true
+      }
+
+      else -> {
         // Just go to the next line.
         currentLineIndex++
         if (ast.lines.size == currentLineIndex) {
           // Reached end of program, without hitting an "END" statement.
-          break
+          return true
         }
       }
-    } while (true)
+    }
+    return false
   }
 
   private fun getLineIndexByLineNumberOrDie(lineNumber: Int) : Int {
@@ -609,23 +593,7 @@ class VirtualMachine {
     exitProcess(1)
   }
 
-  internal fun jump(lineNumber: Int) {
-    jumpRequest = lineNumber
-  }
-
-  internal fun jumpSubroutine(lineNumber: Int) {
-    gosubRequest = lineNumber
-  }
-
-  internal fun requestReturn() {
-    returnRequest = true
-  }
-
-  internal fun halt() {
-    endRequest = true
-  }
-
-  internal fun setVar(identifier: Char, value: Int) {
+  private fun setVar(identifier: Char, value: Int) {
     variables[identifier] = value
   }
 
@@ -651,8 +619,8 @@ fun main(args: Array<String>) {
   val lexer = Lexer(program)
   val ast = Parser(lexer).parseProgram()
 
-  val interpreter = VirtualMachine()
-  interpreter.interpret(ast)
+  val interpreter = Interpreter()
+  interpreter.run(ast)
 }
 
 
