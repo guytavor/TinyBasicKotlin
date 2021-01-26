@@ -39,9 +39,7 @@ class Parser(private val lexer: Lexer) {
     lookAhead = if (lexer.hasToken()) lexer.nextToken() else Token("", TokenType.EOF, 0, 0)
   }
 
-  private fun peekNextToken() : Token {
-    return lookAhead
-  }
+  private fun peekNextToken() : Token = lookAhead
 
   private fun abort(message: String) {
     println("Error line: ${currentToken.line} at: ${currentToken.position}: $message")
@@ -107,9 +105,8 @@ class Parser(private val lexer: Lexer) {
     return currentToken
   }
 
-  private fun comparison() : Comparison {
-    return Comparison(expression(), relop(), expression())
-  }
+  private fun comparison() = Comparison(expression(), relop(), expression())
+
 
   private fun relop() : Token {
     nextToken()
@@ -137,14 +134,13 @@ class Parser(private val lexer: Lexer) {
     }
   }
 
-  private fun stringOrExpression() : StringOrExpression {
-    return when (peekNextToken().tokenType) {
+  private fun stringOrExpression() : StringOrExpression =
+    when (peekNextToken().tokenType) {
       TokenType.STRING -> {
         matchNext(TokenType.STRING)
         StringOrExpression(string = currentToken.string)
       }
       else -> StringOrExpression(expression = expression())
-    }
   }
 
 
@@ -226,11 +222,9 @@ class Parser(private val lexer: Lexer) {
     constructor(expression: Expression) {
       this.expression = expression
     }
-    fun isString() : Boolean {
-      return string != null
-    }
-    override fun toString(): String {
-      return if (isString()) string!! else expression!!.toString()
-    }
+    fun isString() = string != null
+
+    override fun toString() =
+      if (isString()) string!! else expression!!.toString()
   }
 }

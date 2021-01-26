@@ -12,9 +12,7 @@ class Lexer(private val program: String) {
   private var currentPosInLine: Int = 0
   private var currentChar: Char = 0.toChar()
 
-  fun hasToken(): Boolean {
-    return currentIndex < program.length
-  }
+  fun hasToken() = currentIndex < program.length
 
   fun nextToken(): Token {
 
@@ -112,9 +110,8 @@ class Lexer(private val program: String) {
     throw IllegalStateException("unreachable")
   }
 
-  private fun newToken(string: String, tokenType: TokenType) : Token {
-    return Token(string, tokenType, currentLine, currentPosInLine)
-  }
+  private fun newToken(string: String, tokenType: TokenType) : Token =
+    Token(string, tokenType, currentLine, currentPosInLine)
 
   private fun nextChar() {
     currentChar = program[++currentIndex]
@@ -127,9 +124,7 @@ class Lexer(private val program: String) {
 
   }
 
-  private fun peek(): Char {
-    return program[currentIndex + 1]
-  }
+  private fun peek(): Char = program[currentIndex + 1]
 
   private fun abort(message: String) {
     println("Error line: $currentLine at: $currentPosInLine: $message")

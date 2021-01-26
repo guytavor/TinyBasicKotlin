@@ -26,6 +26,19 @@ fun main(args: Array<String>) {
 
 
 // TODO:
+// expand so we can compile zx spectrum program covert date and pangolin here: https://worldofspectrum.org/ZXBasicManual/zxmanappd.html
+// multi statement in lin
+// string vars
+// dims and string dims
+// for loop
+// read/data
+// input label semicolon
+// var labels more than one char (string no)
+// GOTO -> GO TO
+// GOSUB -> GO SUB
+// print semicolon multiple stings
+// double maths, not just ints
+
 // * expand to zx spectrum basic?
 // * rewrite with antlr?
 // * implement zx spectrum like editor / command line?
