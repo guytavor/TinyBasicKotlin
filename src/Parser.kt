@@ -42,7 +42,7 @@ class Parser(private val lexer: Lexer) {
   private fun peekNextToken() : Token = lookAhead
 
   private fun abort(message: String) {
-    println("Error line: ${currentToken.line} at: ${currentToken.position}: $message")
+    println("Error parsing line: ${currentToken.line} at: ${currentToken.position}: $message")
     exitProcess(0)
   }
 
@@ -53,11 +53,24 @@ class Parser(private val lexer: Lexer) {
   private fun line() : Line {
     matchNext(TokenType.NUMBER)
     val lineNumber = currentToken.string.toInt()
-    val statement = statement()
+    val statements = statements()
     if (peekNextToken().tokenType != TokenType.EOF) {
       matchNext(TokenType.NEWLINE)
     }
-    return Line(lineNumber = lineNumber, statement = statement)
+    return Line(lineNumber = lineNumber, statements = statements)
+  }
+
+  private fun statements() : List<Statement> {
+    val statements = mutableListOf<Statement>()
+    do {
+      val statement = statement()
+      statements.add(statement)
+      if (peekNextToken().tokenType == TokenType.COLON) {
+        nextToken()  // eat colon.
+      }
+    }
+    while (peekNextToken().tokenType != TokenType.NEWLINE)
+    return statements
   }
 
   private fun statement() :  Statement {
@@ -188,7 +201,7 @@ class Parser(private val lexer: Lexer) {
    */
   data class AST(val lines: MutableSet<Line>)
 
-  data class Line(val lineNumber: Int, val statement: Statement)
+  data class Line(val lineNumber: Int, val statements: List<Statement>)
 
   interface Statement
   class ReturnStatement : Statement

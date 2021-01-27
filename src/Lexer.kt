@@ -32,6 +32,7 @@ class Lexer(private val program: String) {
     when (currentChar) {
 
       '\n' -> return newToken("\n", TokenType.NEWLINE)
+      ':' -> return newToken(":", TokenType.COLON)
       ',' -> return newToken(",", TokenType.COMMA)
       '*' -> return newToken("*",  TokenType.ASTERISK)
       '/' -> return newToken("/",  TokenType.SLASH)
@@ -127,7 +128,7 @@ class Lexer(private val program: String) {
   private fun peek(): Char = program[currentIndex + 1]
 
   private fun abort(message: String) {
-    println("Error line: $currentLine at: $currentPosInLine: $message")
+    println("Syntax Error line: $currentLine at: $currentPosInLine: $message")
     exitProcess(0)
   }
 
@@ -157,6 +158,7 @@ enum class TokenType(val isKeyword: Boolean) {
   NUMBER(false),
   STRING(false),
   COMMA(isKeyword = false),
+  COLON(false),
 
   // KEYWORDS.
   END(true),

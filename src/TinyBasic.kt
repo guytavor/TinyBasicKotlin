@@ -27,7 +27,6 @@ fun main(args: Array<String>) {
 
 // TODO:
 // expand so we can compile zx spectrum program covert date and pangolin here: https://worldofspectrum.org/ZXBasicManual/zxmanappd.html
-// multi statement in lin
 // string vars
 // dims and string dims
 // for loop

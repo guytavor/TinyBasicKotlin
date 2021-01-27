@@ -6,7 +6,7 @@ This was written as an exercise of manually writing TinyBasic interpreter.
 
 Here is the supported syntax in BNF form, adapted from wikipedia: https://en.wikipedia.org/wiki/Tiny_BASIC
 
-    line ::= number statement CR
+    line ::= number statement (: statement) NL
     statement ::=
       PRINT (string | expression)
       IF comparison THEN statement

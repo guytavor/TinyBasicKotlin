@@ -1,30 +1,38 @@
 import java.util.*
 import kotlin.system.exitProcess
 
+
 class Interpreter {
   private var ast = Parser.AST(mutableSetOf())
   private val variables: MutableMap<Char, Int> = mutableMapOf()  // vars are single chars, only contain int values.
-  private var currentLineIndex = -1
+  private var currentStatementIndex = StatementIndex(-1, -1)
+  private var currentLineNumber = -1  // The number of the current BASIC program line number
+  private var numberOfStatementsInCurrentLine = -1
+  private var returnAddresses = Stack<StatementIndex>()  // stack of addresses to 'RETURN' to.
 
-  private var returnAddresses = Stack<Int>()  // stach of addresses to 'RETURN' to.
 
   fun run(ast: Parser.AST) {
     this.ast = ast
-    currentLineIndex = 0
+    currentStatementIndex = StatementIndex(0, 0)
     do {
-      val line = ast.lines.elementAt(currentLineIndex)
-
-      if (interpret(line.statement, ast)) {
+      if (interpretCurrentStatement(ast)) {
         break
       }
-
     } while (true)
+  }
+
+  private fun interpretCurrentStatement(ast: Parser.AST) : Boolean {
+    val (currentLineNumber, statements) = ast.lines.elementAt(currentStatementIndex.lineIndex)
+    this.currentLineNumber = currentLineNumber
+    this.numberOfStatementsInCurrentLine = statements.size
+    val statement = statements.elementAt(currentStatementIndex.statementInLineIndex)
+    return interpret(statement, ast)
   }
 
   /**
    * Interprets the given 'statement' returns true iff program should stop.
    */
-  private fun interpret(statement: Parser.Statement, ast: Parser.AST): Boolean {
+  private fun interpret(statement: Parser.Statement, ast: Parser.AST) : Boolean {
 
     // Handle statements.
     when (statement) {
@@ -54,17 +62,21 @@ class Interpreter {
 
       is Parser.GotoStatement -> {
         val lineNumber = evaluate(statement.expression)
-        currentLineIndex = getLineIndexByLineNumberOrDie(lineNumber)
+        currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
       }
 
       is Parser.GosubStatement -> {
-        returnAddresses.push(currentLineIndex + 1)
+        // Push the next statement information to the returnAddresses stack.
+        val returnTo = getNextStatementIndex()
+        returnAddresses.push(returnTo)
+
+        // Jump to gosub target.
         val lineNumber = evaluate(statement.expression)
-        currentLineIndex = getLineIndexByLineNumberOrDie(lineNumber)
+        currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
       }
 
       is Parser.ReturnStatement -> {
-        currentLineIndex = returnAddresses.pop()
+        currentStatementIndex = returnAddresses.pop()
       }
 
       is Parser.EndStatement -> {
@@ -72,9 +84,9 @@ class Interpreter {
       }
 
       else -> {
-        // Just go to the next line.
-        currentLineIndex++
-        if (ast.lines.size == currentLineIndex) {
+        // Just go to the next statement.
+        currentStatementIndex = getNextStatementIndex()
+        if (ast.lines.size == currentStatementIndex.lineIndex) {
           // Reached end of program, without hitting an "END" statement.
           return true
         }
@@ -82,6 +94,13 @@ class Interpreter {
     }
     return false
   }
+
+  private fun getNextStatementIndex() =
+    if (numberOfStatementsInCurrentLine > currentStatementIndex.statementInLineIndex + 1) {
+      StatementIndex(currentStatementIndex.lineIndex, currentStatementIndex.statementInLineIndex + 1)
+    } else {
+      StatementIndex(currentStatementIndex.lineIndex + 1)
+    }
 
 
   private fun evaluate(comparison: Parser.Comparison) : Boolean {
@@ -165,7 +184,7 @@ class Interpreter {
   }
 
   private fun abort(message: String) {
-    println("$ast.lines. ERROR: $message")
+    println("Runtime error: Line: ${currentLineNumber}. ERROR: $message")
     exitProcess(1)
   }
 
@@ -181,5 +200,7 @@ class Interpreter {
     }
     return result
   }
+
+  data class StatementIndex(var lineIndex: Int, var statementInLineIndex: Int = 0)
 
 }
