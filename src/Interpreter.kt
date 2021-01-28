@@ -3,7 +3,7 @@ import java.util.*
 
 class Interpreter {
   private var ast = Parser.AST(mutableSetOf())
-  private val variables: MutableMap<Char, Int> = mutableMapOf()  // vars are single chars, only contain int values.
+  private val variables: MutableMap<Char, Double> = mutableMapOf()  // vars are single chars, only contain int values.
   private var currentStatementIndex = StatementIndex(-1, -1)
   private var currentLineNumber = -1  // The number of the current BASIC program line number
   private var numberOfStatementsInCurrentLine = -1
@@ -38,7 +38,7 @@ class Interpreter {
     when (statement) {
 
       is Parser.PrintStatement -> {
-        println(evaluate(statement.stringOrExpression))
+        println(evaluate(statement.stringOrExpression).toString().removeSuffix(".0"))
       }
 
       is Parser.IfStatement -> {
@@ -53,7 +53,7 @@ class Interpreter {
 
       is Parser.InputStatement -> {
         val value = readLine()!!
-        setVar(statement.identifier.string[0], value.toInt())
+        setVar(statement.identifier.string[0], value.toDouble())
       }
 
       is Parser.ForStatement -> {
@@ -74,7 +74,7 @@ class Interpreter {
         val step = if (forLoopContext.step != null) {
           evaluate(forLoopContext.step)
         } else {
-          1
+          1.0
         }
         val value = getVar(identifier) + step
 
@@ -92,7 +92,7 @@ class Interpreter {
         when (statement.goType.tokenType) {
 
           TokenType.TO -> {
-            val targetLineNumber = evaluate(statement.expression)
+            val targetLineNumber = evaluate(statement.expression).toInt()
             currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(targetLineNumber))
           }
 
@@ -102,7 +102,7 @@ class Interpreter {
             returnAddresses.push(returnTo)
 
             // Jump to gosub target.
-            val lineNumber = evaluate(statement.expression)
+            val lineNumber = evaluate(statement.expression).toInt()
             currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
           }
         }
@@ -153,7 +153,7 @@ class Interpreter {
     }
   }
 
-  private fun evaluate(expression: Parser.Expression) : Int {
+  private fun evaluate(expression: Parser.Expression) : Double {
     with (expression) {
       var value = evaluate(term)
       if (op != null && rTerm != null) {
@@ -173,17 +173,17 @@ class Interpreter {
     }
   }
 
-  private fun evaluate(primary: Parser.Primary) : Int {
+  private fun evaluate(primary: Parser.Primary) : Double {
     with (primary) {
       return when (primary.token.tokenType) {
         TokenType.VAR -> getVar(token.string[0])
-        TokenType.NUMBER -> token.string.toInt()
+        TokenType.NUMBER -> token.string.toDouble()
         else -> throw IllegalStateException("Invalid primary type: $primary")
       }
     }
   }
 
-  private fun evaluate(unary: Parser.Unary) : Int {
+  private fun evaluate(unary: Parser.Unary) : Double {
     with (unary) {
       var value = evaluate(primary)
       if (op?.tokenType == TokenType.MINUS) {
@@ -193,7 +193,7 @@ class Interpreter {
     }
   }
 
-  private fun evaluate(term: Parser.Term) : Int {
+  private fun evaluate(term: Parser.Term) : Double {
     with (term) {
       var value = evaluate(unary)
       if (op != null) {
@@ -216,11 +216,11 @@ class Interpreter {
     throw InterpreterException("Line number: $lineNumber not found", currentLineNumber)
   }
 
-  private fun setVar(identifier: Char, value: Int) {
+  private fun setVar(identifier: Char, value: Double) {
     variables[identifier] = value
   }
 
-  private fun getVar(identifier: Char): Int {
+  private fun getVar(identifier: Char): Double {
     return variables[identifier]
       ?: throw InterpreterException("Referenced variable $identifier does not exist. use LET first", currentLineNumber)
   }

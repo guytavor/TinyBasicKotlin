@@ -59,7 +59,7 @@ class Lexer(private val program: String) {
       }
       in '0'..'9' -> {
         val startPos = currentIndex
-        while (peek().isDigit()) {
+        while (peek().isDigit() || peek() == '.') {
           // Get rest of number.
           nextChar()
         }
