@@ -1,5 +1,3 @@
-import kotlin.system.exitProcess
-
 /**
  * Creates an AST from lexed code.
  */
@@ -30,7 +28,8 @@ class Parser(private val lexer: Lexer) {
 
   private fun match(tokenType: TokenType) {
     if (currentToken.tokenType != tokenType) {
-      abort("Expected $tokenType, found: ${currentToken.tokenType}")
+      throw ParserException("Expected $tokenType, found: ${currentToken.tokenType}",
+        currentToken.line, currentToken.position)
     }
   }
 
@@ -40,11 +39,6 @@ class Parser(private val lexer: Lexer) {
   }
 
   private fun peekNextToken() : Token = lookAhead
-
-  private fun abort(message: String) {
-    println("Error parsing line: ${currentToken.line} at: ${currentToken.position}: $message")
-    exitProcess(0)
-  }
 
 
   // Parse syntax elements, such as line, statement, expression, etc..
@@ -84,6 +78,27 @@ class Parser(private val lexer: Lexer) {
         return RemStatement()
       }
 
+      TokenType.FOR -> {
+
+        val identifier = identifier()
+        val equals = equals()
+        val initialValue = expression()
+        val toToken = toToken()
+        val limit = expression()
+        var step: Token? = null
+        var stepExpression: Expression? = null
+
+        if (peekNextToken().tokenType == TokenType.STEP) {
+            step = step()
+            stepExpression = expression()
+        }
+
+        return ForStatement(
+          identifier, equals, initialValue, toToken, limit, step, stepExpression)
+      }
+
+      TokenType.NEXT -> return NextStatement(identifier())
+
       TokenType.PRINT -> return PrintStatement(stringOrExpression())
 
       TokenType.IF -> return IfStatement(comparison(), then(), statement())
@@ -99,15 +114,23 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.END -> return EndStatement()
     }
-    abort("Unexpected: ${currentToken.string}")
-    throw IllegalStateException()
+    throw ParserException("Unexpected: ${currentToken.string}", currentToken.line, currentToken.position)
   }
 
   private fun goType(): Token {
     nextToken()
     if (!arrayOf(TokenType.TO, TokenType.SUB).contains(currentToken.tokenType )) {
-      abort("Expected either TO or SUB after GO")
+      throw ParserException("Expected either TO or SUB after GO", currentToken.line, currentToken.position)
     }
+    return currentToken
+  }
+
+  private fun toToken() : Token {
+    matchNext(TokenType.TO)
+    return currentToken
+  }
+  private fun step() : Token {
+    matchNext(TokenType.STEP)
     return currentToken
   }
 
@@ -133,9 +156,8 @@ class Parser(private val lexer: Lexer) {
     when (currentToken.tokenType) {
       TokenType.EQ, TokenType.GTEQ, TokenType.GT, TokenType.LT, TokenType.LTEQ, TokenType.NOTEQ ->
         return currentToken
-      else -> abort("Expected operator, found ${currentToken.tokenType}")
+      else -> throw ParserException("Expected operator, found ${currentToken.tokenType}", currentToken.line, currentToken.position)
     }
-    throw IllegalStateException()
   }
 
   private fun expression() : Expression {
@@ -197,7 +219,8 @@ class Parser(private val lexer: Lexer) {
   private fun primary() : Primary {
     nextToken()
     if (currentToken.tokenType != TokenType.VAR && currentToken.tokenType != TokenType.NUMBER) {
-      abort("Expecting either a number or variable name, got: ${currentToken.tokenType}")
+      throw ParserException("Expecting either a number or variable name, got: ${currentToken.tokenType}",
+        currentToken.line, currentToken.position)
     }
     return Primary(currentToken)
   }
@@ -214,6 +237,14 @@ class Parser(private val lexer: Lexer) {
   class ReturnStatement : Statement
   class EndStatement : Statement
   class RemStatement : Statement
+  data class ForStatement(val identifier: Token,
+                          val equals: Token,
+                          val initialValue: Expression,
+                          val to: Token,
+                          val limit: Expression,
+                          val step: Token? = null,
+                          val stepExpression: Expression? = null) : Statement
+  data class NextStatement(val identifier: Token) : Statement
   data class GoStatement(val goType: Token, val expression: Expression) : Statement
   data class LetStatement(val identifier: Token,
                           val equals: Token,
@@ -247,3 +278,6 @@ class Parser(private val lexer: Lexer) {
       if (isString()) string!! else expression!!.toString()
   }
 }
+
+class ParserException(message:String, lineNumber: Int, position: Int) :
+  Exception("Error parsing line: $lineNumber at: $position: $message")

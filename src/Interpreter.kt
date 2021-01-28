@@ -1,5 +1,4 @@
 import java.util.*
-import kotlin.system.exitProcess
 
 
 class Interpreter {
@@ -9,6 +8,7 @@ class Interpreter {
   private var currentLineNumber = -1  // The number of the current BASIC program line number
   private var numberOfStatementsInCurrentLine = -1
   private var returnAddresses = Stack<StatementIndex>()  // stack of addresses to 'RETURN' to.
+  private var forLoops: MutableMap<Char, ForLoopContext> = mutableMapOf()
 
 
   fun run(ast: Parser.AST) {
@@ -55,16 +55,46 @@ class Interpreter {
         val value = readLine()!!
         setVar(statement.identifier.string[0], value.toInt())
       }
+
+      is Parser.ForStatement -> {
+        val identifier = statement.identifier.string[0]
+        forLoops[identifier] = ForLoopContext(getNextStatementIndex(), statement.stepExpression, statement.limit)
+        setVar(identifier, evaluate(statement.initialValue))
+      }
     }
 
     // Handle branching and line advancement statements.
     when (statement) {
 
+      is Parser.NextStatement -> {
+        val identifier = statement.identifier.string[0]
+        val forLoopContext = forLoops[identifier]
+          ?: throw InterpreterException("NEXT without FOR for identifier $identifier", currentLineNumber)
+
+        val step = if (forLoopContext.step != null) {
+          evaluate(forLoopContext.step)
+        } else {
+          1
+        }
+        val value = getVar(identifier) + step
+
+
+        currentStatementIndex = if (forLoopContext.reachedLimit) {
+          getNextStatementIndex()
+        } else {
+          setVar(identifier, value)
+          forLoopContext.reachedLimit = (value == evaluate(forLoopContext.limit))
+          forLoopContext.loopStartIndex
+        }
+      }
+
       is Parser.GoStatement -> {
-        val lineNumber = evaluate(statement.expression)
         when (statement.goType.tokenType) {
 
-          TokenType.TO -> currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
+          TokenType.TO -> {
+            val targetLineNumber = evaluate(statement.expression)
+            currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(targetLineNumber))
+          }
 
           TokenType.SUB -> {
             // Push the next statement information to the returnAddresses stack.
@@ -90,11 +120,11 @@ class Interpreter {
       else -> {
         // Just go to the next statement.
         currentStatementIndex = getNextStatementIndex()
-        if (ast.lines.size == currentStatementIndex.lineIndex) {
-          // Reached end of program, without hitting an "END" statement.
-          return true
-        }
       }
+    }
+    if (ast.lines.size == currentStatementIndex.lineIndex) {
+      // Reached end of program, without hitting an "END" statement.
+      return true
     }
     return false
   }
@@ -183,28 +213,25 @@ class Interpreter {
         return i
       }
     }
-    abort("Line number: $lineNumber not found")
-    return -1
-  }
-
-  private fun abort(message: String) {
-    println("Runtime error: Line: ${currentLineNumber}. ERROR: $message")
-    exitProcess(1)
+    throw InterpreterException("Line number: $lineNumber not found", currentLineNumber)
   }
 
   private fun setVar(identifier: Char, value: Int) {
     variables[identifier] = value
   }
 
-  private fun getVar(identifier: Char) : Int {
-    val result = variables[identifier]
-    if (result == null) {
-      abort("Referenced variable $identifier does not exist. use LET first")
-      return 0  // Unreachable, abort crashes.
-    }
-    return result
+  private fun getVar(identifier: Char): Int {
+    return variables[identifier]
+      ?: throw InterpreterException("Referenced variable $identifier does not exist. use LET first", currentLineNumber)
   }
 
   data class StatementIndex(var lineIndex: Int, var statementInLineIndex: Int = 0)
+  data class ForLoopContext(val loopStartIndex: StatementIndex,
+                            val step: Parser.Expression?,
+                            val limit: Parser.Expression,
+                            var reachedLimit: Boolean = false)
 
 }
+
+class InterpreterException(message:String, lineNumber: Int) :
+  Exception("Runtime error: Line $lineNumber. ERROR: $message")

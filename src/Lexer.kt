@@ -1,5 +1,3 @@
-import kotlin.system.exitProcess
-
 /**
  * Tokenizer
  *
@@ -80,7 +78,7 @@ class Lexer(private val program: String) {
           val keywordToken = getKeywordToken(keyword)
           // Must be a valid keyword.
           if (keywordToken == null) {
-            abort("Invalid keyword: $keyword")
+            throw LexerException("Invalid keyword: $keyword", currentLine, currentPosInLine)
           } else {
             if (keywordToken == TokenType.REM) {
               // Eat remark until end of line
@@ -105,10 +103,8 @@ class Lexer(private val program: String) {
         return newToken(program.substring(startPos, currentIndex), TokenType.STRING)
       }
 
-      else -> abort("Unexpected char: $currentChar")
+      else -> throw LexerException("Unexpected char: $currentChar", currentLine, currentPosInLine)
     }
-    abort("Unexpected char: $currentChar")
-    throw IllegalStateException("unreachable")
   }
 
   private fun newToken(string: String, tokenType: TokenType) : Token =
@@ -126,11 +122,6 @@ class Lexer(private val program: String) {
   }
 
   private fun peek(): Char = program[currentIndex + 1]
-
-  private fun abort(message: String) {
-    println("Syntax Error line: $currentLine at: $currentPosInLine: $message")
-    exitProcess(0)
-  }
 
   private fun getKeywordToken(keyword: String): TokenType? {
     return try {
@@ -161,6 +152,9 @@ enum class TokenType(val isKeyword: Boolean) {
   COLON(false),
 
   // KEYWORDS.
+  FOR(true),
+  STEP(true),
+  NEXT(true),
   END(true),
   GO(true),
   TO(true),
@@ -183,6 +177,11 @@ enum class TokenType(val isKeyword: Boolean) {
   MINUS(false),
   NOTEQ(false),
   PLUS(false),
-  SLASH(false)
+  SLASH(false),
+
 }
+
+class LexerException(message:String, lineNumber: Int, position: Int) :
+  Exception("Syntax Error line: $lineNumber  at: $position: $message")
+
 
