@@ -33,8 +33,6 @@ fun main(args: Array<String>) {
 // read/data
 // input label semicolon
 // var labels more than one char (string no)
-// GOTO -> GO TO
-// GOSUB -> GO SUB
 // print semicolon multiple stings
 // double maths, not just ints
 

@@ -60,19 +60,23 @@ class Interpreter {
     // Handle branching and line advancement statements.
     when (statement) {
 
-      is Parser.GotoStatement -> {
+      is Parser.GoStatement -> {
         val lineNumber = evaluate(statement.expression)
-        currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
-      }
+        when (statement.goType.tokenType) {
 
-      is Parser.GosubStatement -> {
-        // Push the next statement information to the returnAddresses stack.
-        val returnTo = getNextStatementIndex()
-        returnAddresses.push(returnTo)
+          TokenType.TO -> currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
 
-        // Jump to gosub target.
-        val lineNumber = evaluate(statement.expression)
-        currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
+          TokenType.SUB -> {
+            // Push the next statement information to the returnAddresses stack.
+            val returnTo = getNextStatementIndex()
+            returnAddresses.push(returnTo)
+
+            // Jump to gosub target.
+            val lineNumber = evaluate(statement.expression)
+            currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
+          }
+        }
+
       }
 
       is Parser.ReturnStatement -> {

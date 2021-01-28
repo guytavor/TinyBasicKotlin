@@ -162,8 +162,9 @@ enum class TokenType(val isKeyword: Boolean) {
 
   // KEYWORDS.
   END(true),
-  GOSUB(true),
-  GOTO(true),
+  GO(true),
+  TO(true),
+  SUB(true),
   IF(true),
   INPUT(true),
   LET(true),

@@ -88,13 +88,12 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.IF -> return IfStatement(comparison(), then(), statement())
 
-      TokenType.GOTO -> return GotoStatement(expression())
+      TokenType.GO -> return GoStatement(goType(), expression())
 
       TokenType.INPUT -> return InputStatement(identifier())
 
       TokenType.LET -> return LetStatement(identifier(), equals(), expression())
 
-      TokenType.GOSUB -> return GosubStatement(expression())
 
       TokenType.RETURN -> return ReturnStatement()
 
@@ -102,6 +101,14 @@ class Parser(private val lexer: Lexer) {
     }
     abort("Unexpected: ${currentToken.string}")
     throw IllegalStateException()
+  }
+
+  private fun goType(): Token {
+    nextToken()
+    if (!arrayOf(TokenType.TO, TokenType.SUB).contains(currentToken.tokenType )) {
+      abort("Expected either TO or SUB after GO")
+    }
+    return currentToken
   }
 
   private fun equals() : Token {
@@ -207,13 +214,12 @@ class Parser(private val lexer: Lexer) {
   class ReturnStatement : Statement
   class EndStatement : Statement
   class RemStatement : Statement
-  data class GosubStatement(val expression: Expression) : Statement
+  data class GoStatement(val goType: Token, val expression: Expression) : Statement
   data class LetStatement(val identifier: Token,
                           val equals: Token,
                           val expression: Expression) : Statement
 
   data class InputStatement(val identifier: Token) : Statement
-  data class GotoStatement(val expression: Expression) : Statement
   data class IfStatement(val comparison: Comparison,
                          val then: Token,
                          val thenStatement: Statement) : Statement
