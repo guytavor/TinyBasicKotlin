@@ -113,7 +113,7 @@ class Interpreter {
         currentStatementIndex = returnAddresses.pop()
       }
 
-      is Parser.EndStatement -> {
+      is Parser.StopStatement -> {
         return true
       }
 

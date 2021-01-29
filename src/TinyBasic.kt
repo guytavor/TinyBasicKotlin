@@ -29,7 +29,6 @@ fun main(args: Array<String>) {
 // expand so we can compile zx spectrum program covert date and pangolin here: https://worldofspectrum.org/ZXBasicManual/zxmanappd.html
 // string vars
 // dims and string dims
-// for loop
 // read/data
 // input label semicolon
 // var labels more than one char (string no)

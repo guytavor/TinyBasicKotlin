@@ -155,7 +155,7 @@ enum class TokenType(val isKeyword: Boolean) {
   FOR(true),
   STEP(true),
   NEXT(true),
-  END(true),
+  STOP(true),
   GO(true),
   TO(true),
   SUB(true),

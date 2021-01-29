@@ -4,4 +4,4 @@
 45 LET N = N - 1
 50 IF N > 0 THEN GO TO 40
 130 PRINT "Goodbye "
-140 END
+140 STOP

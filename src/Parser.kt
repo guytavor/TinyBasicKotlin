@@ -112,7 +112,7 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.RETURN -> return ReturnStatement()
 
-      TokenType.END -> return EndStatement()
+      TokenType.STOP -> return StopStatement()
     }
     throw ParserException("Unexpected: ${currentToken.string}", currentToken.line, currentToken.position)
   }
@@ -235,7 +235,7 @@ class Parser(private val lexer: Lexer) {
 
   interface Statement
   class ReturnStatement : Statement
-  class EndStatement : Statement
+  class StopStatement : Statement
   class RemStatement : Statement
   data class ForStatement(val identifier: Token,
                           val equals: Token,
