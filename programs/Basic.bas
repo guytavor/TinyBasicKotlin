@@ -1,5 +1,7 @@
 5 REM ***** My Program ****
+7 PRINT 8+8*- 8
 10 PRINT "Hello, world!"
+12 PRINT 3+3+3
 15 PRINT 12987*99+15/3
 20 PRINT "what is your age?"
 40 INPUT N

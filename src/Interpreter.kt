@@ -156,11 +156,11 @@ class Interpreter {
   private fun evaluate(expression: Parser.Expression) : Double {
     with (expression) {
       var value = evaluate(term)
-      if (op != null && rTerm != null) {
+      if (op != null && rExpression != null) {
         value += if (op.tokenType == TokenType.PLUS) {
-          evaluate(rTerm)
+          evaluate(rExpression)
         } else {
-          -1 * evaluate(rTerm)
+          -1 * evaluate(rExpression)
         }
       }
       return value

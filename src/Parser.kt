@@ -163,14 +163,14 @@ class Parser(private val lexer: Lexer) {
   private fun expression() : Expression {
     val term = term()
     val op: Token?
-    val rTerm: Term?
+    val rExpression: Expression?
 
     return when (peekNextToken().tokenType) {
       TokenType.PLUS, TokenType.MINUS -> {
         nextToken()
         op = currentToken
-        rTerm = term()
-        Expression(term, op, rTerm)
+        rExpression = expression()
+        Expression(term, op, rExpression)
       }
       else -> Expression(term, null, null)
     }
@@ -261,7 +261,7 @@ class Parser(private val lexer: Lexer) {
   data class Primary(val token: Token)
   data class Unary(val op: Token?, val primary: Primary)
   data class Term(val unary: Unary, val op: Token?, val rUnary: Unary?)
-  data class Expression(val term: Term, val op: Token?, val rTerm: Term?)
+  data class Expression(val term: Term, val op: Token?, val rExpression: Expression?)
   class StringOrExpression {
     var string: String? = null
     var expression: Expression? = null
