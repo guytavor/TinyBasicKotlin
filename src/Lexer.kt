@@ -39,6 +39,7 @@ class Lexer(private val program: String) {
       '=' -> return newToken("=",  TokenType.EQ)
       '>' -> {
         return if (peek() == '=') {
+          nextChar()
           newToken(">=", TokenType.GTEQ)
         } else {
           newToken(">", TokenType.GT)
@@ -47,9 +48,11 @@ class Lexer(private val program: String) {
       '<' -> {
         return when {
           peek() == '>' -> {
+            nextChar()
             newToken("<>", TokenType.NOTEQ)
           }
           peek() == '=' -> {
+            nextChar()
             newToken("<=", TokenType.LTEQ)
           }
           else -> {
@@ -80,8 +83,11 @@ class Lexer(private val program: String) {
         // If the identifier is not a keyword, it is a var.
         return if (keywordToken == null) {
           if (peek() == '$') {
+            if (identifier.length != 1) {
+              throw LexerException("String variable can only b 1 char long", currentLine, currentPosInLine)
+            }
             nextChar()  // eat $
-            newToken(currentChar.toString(), TokenType.SVAR)
+            newToken(identifier, TokenType.SVAR)
           } else {
             // Variable name.
             newToken(identifier, TokenType.VAR)

@@ -3,8 +3,8 @@
  */
 class Parser(private val lexer: Lexer) {
 
-  var currentToken = Token("", TokenType.EOF, 0, 0)
-  var lookAhead = Token("", TokenType.EOF, 0, 0)
+  private var currentToken = Token("", TokenType.EOF, 0, 0)
+  private var lookAhead = Token("", TokenType.EOF, 0, 0)
 
   init {
     nextToken()  // read current and next
@@ -113,8 +113,11 @@ class Parser(private val lexer: Lexer) {
       TokenType.RETURN -> return ReturnStatement()
 
       TokenType.STOP -> return StopStatement()
+
+      else -> {
+        throw ParserException("Unexpected: ${currentToken.string}", currentToken.line, currentToken.position)
+      }
     }
-    throw ParserException("Unexpected: ${currentToken.string}", currentToken.line, currentToken.position)
   }
 
   private fun goType(): Token {
@@ -144,7 +147,11 @@ class Parser(private val lexer: Lexer) {
   }
 
   private fun identifier() : Token {
-    matchNext(TokenType.VAR)
+    nextToken()
+    if (currentToken.tokenType != TokenType.SVAR && currentToken.tokenType != TokenType.VAR) {
+      throw ParserException("Identifier expected. Found ${currentToken.string}", currentToken.line,
+        currentToken.position)
+    }
     return currentToken
   }
 
@@ -205,11 +212,9 @@ class Parser(private val lexer: Lexer) {
   private fun unary() : Unary {
     var op: Token? = null
 
-    when (peekNextToken().tokenType) {
-      TokenType.PLUS, TokenType.MINUS -> {
-        nextToken()
-        op = currentToken
-      }
+    if (peekNextToken().tokenType == TokenType.PLUS || peekNextToken().tokenType == TokenType.MINUS) {
+      nextToken()
+      op = currentToken
     }
     val primary = primary()
     return Unary(op, primary)
@@ -218,15 +223,18 @@ class Parser(private val lexer: Lexer) {
 
   private fun primary() : Primary {
     nextToken()
-    if (currentToken.tokenType != TokenType.VAR && currentToken.tokenType != TokenType.NUMBER) {
-      throw ParserException("Expecting either a number or variable name, got: ${currentToken.tokenType}",
+    if (currentToken.tokenType != TokenType.VAR
+      && currentToken.tokenType != TokenType.NUMBER
+      && currentToken.tokenType != TokenType.SVAR
+      && currentToken.tokenType != TokenType.STRING) {
+      throw ParserException("Expecting either number, variable or string, got: ${currentToken.tokenType}",
         currentToken.line, currentToken.position)
     }
     return Primary(currentToken)
   }
 
   /**
-   * Abstract sytax tree represents a program in an abstract object form.
+   * Abstract syntax tree represents a program in an abstract object form.
    * In BASIC this is a list of lines.
    */
   data class AST(val lines: MutableSet<Line>)

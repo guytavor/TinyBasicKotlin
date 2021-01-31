@@ -5,7 +5,7 @@ typealias ForLoopIdentifier = Char
 
 class Interpreter {
   private var ast = Parser.AST(mutableSetOf())
-  private val variables: MutableMap<Identifier, Double> = mutableMapOf()  // vars are single chars, only contain int values.
+  private val variables: MutableMap<Identifier, Value> = mutableMapOf()  // vars are single chars, only contain int values.
   private var currentStatementIndex = StatementIndex(-1, -1)
   private var currentLineNumber = -1  // The number of the current BASIC program line number
   private var numberOfStatementsInCurrentLine = -1
@@ -56,7 +56,7 @@ class Interpreter {
 
       is Parser.InputStatement -> {
         val value = readLine()!!
-        setVar(statement.identifier.string, value.toDouble())
+        setVar(statement.identifier.string, Value(value))
       }
 
       is Parser.ForStatement -> {
@@ -75,18 +75,18 @@ class Interpreter {
           ?: throw InterpreterException("NEXT without FOR for identifier $identifier", currentLineNumber)
 
         val step = if (forLoopContext.step != null) {
-          evaluate(forLoopContext.step)
+          evaluate(forLoopContext.step).toDouble()
         } else {
           1.0
         }
-        val value = getVar(identifier.toString()) + step
+        val value = getVar(identifier.toString()).toDouble() + step
 
 
         currentStatementIndex = if (forLoopContext.reachedLimit) {
           getNextStatementIndex()
         } else {
-          setVar(identifier.toString(), value)
-          forLoopContext.reachedLimit = (value == evaluate(forLoopContext.limit))
+          setVar(identifier.toString(), Value(value))
+          forLoopContext.reachedLimit = (value == evaluate(forLoopContext.limit).toDouble())
           forLoopContext.loopStartIndex
         }
       }
@@ -95,7 +95,7 @@ class Interpreter {
         when (statement.goType.tokenType) {
 
           TokenType.TO -> {
-            val targetLineNumber = evaluate(statement.expression).toInt()
+            val targetLineNumber = evaluate(statement.expression).toDouble().toInt()
             currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(targetLineNumber))
           }
 
@@ -105,7 +105,7 @@ class Interpreter {
             returnAddresses.push(returnTo)
 
             // Jump to gosub target.
-            val lineNumber = evaluate(statement.expression).toInt()
+            val lineNumber = evaluate(statement.expression).toDouble().toInt()
             currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
           }
 
@@ -163,14 +163,23 @@ class Interpreter {
     }
   }
 
-  private fun evaluate(expression: Parser.Expression) : Double {
+  private fun evaluate(expression: Parser.Expression) : Value {
     with (expression) {
       var value = evaluate(term)
       if (op != null && rExpression != null) {
-        value += if (op.tokenType == TokenType.PLUS) {
-          evaluate(rExpression)
-        } else {
-          -1 * evaluate(rExpression)
+        value = when (op.tokenType) {
+          TokenType.PLUS -> {
+            value + evaluate(rExpression)
+          }  // string or double
+          TokenType.MINUS -> {
+            if (value.type == Value.Type.STRING) {
+              throw InterpreterException("Minus is not defined for strings", currentLineNumber)
+            }
+            Value(value.toDouble() - evaluate(rExpression).toDouble())
+          }
+          else -> {
+            throw InterpreterException("Undefined operator: ${op.string}", currentLineNumber)
+          }
         }
       }
       return value
@@ -183,35 +192,42 @@ class Interpreter {
     }
   }
 
-  private fun evaluate(primary: Parser.Primary) : Double {
+  private fun evaluate(primary: Parser.Primary) : Value {
     with (primary) {
       return when (primary.token.tokenType) {
-        TokenType.VAR -> getVar(token.string)
-        TokenType.NUMBER -> token.string.toDouble()
+        TokenType.VAR, TokenType.SVAR -> getVar(token.string)
+        TokenType.NUMBER -> Value(token.string.toDouble())
+        TokenType.STRING -> Value(token.string)
         else -> throw IllegalStateException("Invalid primary type: $primary")
       }
     }
   }
 
-  private fun evaluate(unary: Parser.Unary) : Double {
+  private fun evaluate(unary: Parser.Unary) : Value {
     with (unary) {
-      var value = evaluate(primary)
+      val value = evaluate(primary)
       if (op?.tokenType == TokenType.MINUS) {
-        value *= -1
+        if (value.type != Value.Type.DOUBLE) {
+          throw InterpreterException("Unary minus is not defined for string value", currentLineNumber)
+        }
+        Value(value.toDouble() * -1)
       }
       return value
     }
   }
 
-  private fun evaluate(term: Parser.Term) : Double {
+  private fun evaluate(term: Parser.Term) : Value {
     with (term) {
       var value = evaluate(unary)
       if (op != null) {
-        value *= if (op.tokenType == TokenType.ASTERISK) {
-          evaluate(rUnary!!)
-        } else {
-          (1 / evaluate(rUnary!!))
+        if (value.type != Value.Type.DOUBLE) {
+          throw InterpreterException("* and / are not defined on string values", currentLineNumber)
         }
+        value = Value(value.toDouble() * if (op.tokenType == TokenType.ASTERISK) {
+          evaluate(rUnary!!).toDouble()
+        } else {
+          (1 / evaluate(rUnary!!).toDouble())
+        })
       }
       return value
     }
@@ -226,11 +242,11 @@ class Interpreter {
     throw InterpreterException("Line number: $lineNumber not found", currentLineNumber)
   }
 
-  private fun setVar(identifier: Identifier, value: Double) {
+  private fun setVar(identifier: Identifier, value: Value) {
     variables[identifier] = value
   }
 
-  private fun getVar(identifier: Identifier): Double {
+  private fun getVar(identifier: Identifier): Value {
     return variables[identifier]
       ?: throw InterpreterException("Referenced variable $identifier does not exist. use LET first", currentLineNumber)
   }
@@ -245,3 +261,66 @@ class Interpreter {
 
 class InterpreterException(message:String, lineNumber: Int) :
   Exception("Runtime error: Line $lineNumber. ERROR: $message")
+
+/**
+ * Single class representing both number values and string values.
+ * This keeps parsing object tree simpler, but delegate interpreter
+ * the work of matching expression types and aborting when incompatible.
+ */
+class Value {
+  enum class Type { DOUBLE, STRING }
+  private val memory: String
+  val type: Type
+
+  constructor(string: String) {
+    this.memory = string
+    this.type = Type.STRING
+  }
+  constructor(double: Double) {
+    this.memory = double.toString()
+    this.type = Type.DOUBLE
+  }
+
+  fun toDouble() : Double = memory.toDouble()
+  override fun toString() : String = memory
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (javaClass != other?.javaClass) return false
+
+    other as Value
+
+    if (memory != other.memory) return false
+    if (type != other.type) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = memory.hashCode()
+    result = 31 * result + type.hashCode()
+    return result
+  }
+}
+
+operator fun Value.compareTo(other: Value) : Int {
+  if (this.type != other.type) {
+    throw InterpreterException("Can not add ${this.type} to ${other.type}", -1)
+  }
+  return when (type) {
+    Value.Type.DOUBLE -> this.toDouble().compareTo(other.toDouble())
+    Value.Type.STRING -> this.toString().compareTo(other.toString())
+  }
+}
+
+
+operator fun Value.plus(other: Value) : Value {
+  if (this.type != other.type) {
+    throw InterpreterException("Can not add ${this.type} to ${other.type}", -1)
+  }
+  return when (type) {
+    Value.Type.DOUBLE -> Value(toDouble() + other.toDouble())
+    Value.Type.STRING -> Value(toString() + other)
+  }
+
+}
