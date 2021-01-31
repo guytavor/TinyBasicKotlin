@@ -1,14 +1,16 @@
 import java.util.*
 
+typealias Identifier = String
+typealias ForLoopIdentifier = Char
 
 class Interpreter {
   private var ast = Parser.AST(mutableSetOf())
-  private val variables: MutableMap<Char, Double> = mutableMapOf()  // vars are single chars, only contain int values.
+  private val variables: MutableMap<Identifier, Double> = mutableMapOf()  // vars are single chars, only contain int values.
   private var currentStatementIndex = StatementIndex(-1, -1)
   private var currentLineNumber = -1  // The number of the current BASIC program line number
   private var numberOfStatementsInCurrentLine = -1
   private var returnAddresses = Stack<StatementIndex>()  // stack of addresses to 'RETURN' to.
-  private var forLoops: MutableMap<Char, ForLoopContext> = mutableMapOf()
+  private var forLoops: MutableMap<ForLoopIdentifier, ForLoopContext> = mutableMapOf()
 
 
   fun run(ast: Parser.AST) {
@@ -38,6 +40,7 @@ class Interpreter {
     when (statement) {
 
       is Parser.PrintStatement -> {
+        // if value is integral, don't print ".0" at the end.
         println(evaluate(statement.stringOrExpression).toString().removeSuffix(".0"))
       }
 
@@ -48,18 +51,18 @@ class Interpreter {
       }
 
       is Parser.LetStatement -> {
-        setVar(statement.identifier.string[0], evaluate(statement.expression))
+        setVar(statement.identifier.string, evaluate(statement.expression))
       }
 
       is Parser.InputStatement -> {
         val value = readLine()!!
-        setVar(statement.identifier.string[0], value.toDouble())
+        setVar(statement.identifier.string, value.toDouble())
       }
 
       is Parser.ForStatement -> {
         val identifier = statement.identifier.string[0]
         forLoops[identifier] = ForLoopContext(getNextStatementIndex(), statement.stepExpression, statement.limit)
-        setVar(identifier, evaluate(statement.initialValue))
+        setVar(identifier.toString(), evaluate(statement.initialValue))
       }
     }
 
@@ -76,13 +79,13 @@ class Interpreter {
         } else {
           1.0
         }
-        val value = getVar(identifier) + step
+        val value = getVar(identifier.toString()) + step
 
 
         currentStatementIndex = if (forLoopContext.reachedLimit) {
           getNextStatementIndex()
         } else {
-          setVar(identifier, value)
+          setVar(identifier.toString(), value)
           forLoopContext.reachedLimit = (value == evaluate(forLoopContext.limit))
           forLoopContext.loopStartIndex
         }
@@ -104,6 +107,11 @@ class Interpreter {
             // Jump to gosub target.
             val lineNumber = evaluate(statement.expression).toInt()
             currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
+          }
+
+          else -> {
+            throw InterpreterException("Expected TO or SUB after GO, but found: ${statement.goType.string}",
+              currentLineNumber)
           }
         }
 
@@ -141,15 +149,17 @@ class Interpreter {
     with (comparison) {
       val lvalue = evaluate(lExpression)
       val rValue = evaluate(rExpression)
-      when (relop.tokenType) {
-        TokenType.GT -> return lvalue > rValue
-        TokenType.GTEQ -> return lvalue >= rValue
-        TokenType.LT -> return lvalue < rValue
-        TokenType.LTEQ -> return lvalue <= rValue
-        TokenType.EQ -> return lvalue == rValue
-        TokenType.NOTEQ -> return lvalue != rValue
+      return when (relop.tokenType) {
+        TokenType.GT -> lvalue > rValue
+        TokenType.GTEQ -> lvalue >= rValue
+        TokenType.LT -> lvalue < rValue
+        TokenType.LTEQ -> lvalue <= rValue
+        TokenType.EQ -> lvalue == rValue
+        TokenType.NOTEQ -> lvalue != rValue
+        else -> {
+          throw IllegalStateException("Unsupported operator ${relop.tokenType} in comparison statement")
+        }
       }
-      throw IllegalStateException("Unsupported operator ${relop.tokenType} in comparison statement")
     }
   }
 
@@ -176,7 +186,7 @@ class Interpreter {
   private fun evaluate(primary: Parser.Primary) : Double {
     with (primary) {
       return when (primary.token.tokenType) {
-        TokenType.VAR -> getVar(token.string[0])
+        TokenType.VAR -> getVar(token.string)
         TokenType.NUMBER -> token.string.toDouble()
         else -> throw IllegalStateException("Invalid primary type: $primary")
       }
@@ -216,11 +226,11 @@ class Interpreter {
     throw InterpreterException("Line number: $lineNumber not found", currentLineNumber)
   }
 
-  private fun setVar(identifier: Char, value: Double) {
+  private fun setVar(identifier: Identifier, value: Double) {
     variables[identifier] = value
   }
 
-  private fun getVar(identifier: Char): Double {
+  private fun getVar(identifier: Identifier): Double {
     return variables[identifier]
       ?: throw InterpreterException("Referenced variable $identifier does not exist. use LET first", currentLineNumber)
   }

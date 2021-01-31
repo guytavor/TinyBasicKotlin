@@ -17,6 +17,12 @@ TODO:
 
 You are here
 ------------
-* stash contains wip changes for string type
-* working on making sure int expressions 1+1+1 correctly interprets
-* put stash back, make sure string expressions work as well
+* Introducing strings
+  * The idea is to only have one type of expression
+    and keep for each value the value type.
+    parser / interpreter will throw exception
+    when the types are incompatible.
+    
+  * stash contains wip changes for string type
+  * put stash ony relevant parts of stash that are consisted with
+  the idea above.

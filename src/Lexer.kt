@@ -67,30 +67,34 @@ class Lexer(private val program: String) {
         return newToken(program.substring(startPos, currentIndex + 1),  TokenType.NUMBER)
       }
 
-      in 'A'..'Z' -> {
-        if (peek().isLetter()) {
-          // Get rest of symbol.
-          val startPos = currentIndex
-          while (peek() in 'A'..'Z') {
-            nextChar()
-          }
-          val keyword = program.substring(startPos, currentIndex + 1)
-          val keywordToken = getKeywordToken(keyword)
-          // Must be a valid keyword.
-          if (keywordToken == null) {
-            throw LexerException("Invalid keyword: $keyword", currentLine, currentPosInLine)
+      in 'a'..'z',
+      in  'A'..'Z' -> {
+        // To distinguish between var, svar and keyword
+        // We need to look ahead.
+        val startPos = currentIndex
+        while (peek().isLetterOrDigit()) {
+          nextChar()
+        }
+        val identifier = program.substring(startPos, currentIndex + 1)
+        val keywordToken = getKeywordToken(identifier)
+        // If the identifier is not a keyword, it is a var.
+        return if (keywordToken == null) {
+          if (peek() == '$') {
+            nextChar()  // eat $
+            newToken(currentChar.toString(), TokenType.SVAR)
           } else {
-            if (keywordToken == TokenType.REM) {
-              // Eat remark until end of line
-              while (peek() != '\n') {
-                nextChar()
-              }
-            }
-            return newToken(keyword,  keywordToken)
+            // Variable name.
+            newToken(identifier, TokenType.VAR)
           }
         } else {
-          // Variable name.
-          return newToken(currentChar.toString(),  TokenType.VAR)
+          // Keyword.
+          if (keywordToken == TokenType.REM) {
+            // Eat remark until end of line
+            while (peek() != '\n') {
+              nextChar()
+            }
+          }
+          newToken(identifier,  keywordToken)
         }
       }
 
@@ -144,7 +148,8 @@ data class Token(
 enum class TokenType(val isKeyword: Boolean) {
 
   EOF(false),
-  VAR(false),
+  VAR(false),   // Int variable
+  SVAR(false),  // String variable
   NEWLINE(false),
   NUMBER(false),
   STRING(false),
