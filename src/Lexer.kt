@@ -30,6 +30,8 @@ class Lexer(private val program: String) {
     when (currentChar) {
 
       '\n' -> return newToken("\n", TokenType.NEWLINE)
+      '(' -> return newToken("(", TokenType.LPAR)
+      ')' -> return newToken(")", TokenType.RPAR)
       ':' -> return newToken(":", TokenType.COLON)
       ',' -> return newToken(",", TokenType.COMMA)
       '*' -> return newToken("*",  TokenType.ASTERISK)
@@ -153,41 +155,44 @@ data class Token(
 
 enum class TokenType(val isKeyword: Boolean) {
 
+  COLON(false),
+  COMMA(isKeyword = false),
   EOF(false),
-  VAR(false),   // Int variable
-  SVAR(false),  // String variable
   NEWLINE(false),
   NUMBER(false),
   STRING(false),
-  COMMA(isKeyword = false),
-  COLON(false),
+  SVAR(false),  // String variable
+  VAR(false),   // Numeric variable
 
   // KEYWORDS.
+  DIM(true),
   FOR(true),
-  STEP(true),
-  NEXT(true),
-  STOP(true),
   GO(true),
-  TO(true),
-  SUB(true),
   IF(true),
   INPUT(true),
   LET(true),
+  NEXT(true),
   PRINT(true),
   REM(true),
   RETURN(true),
+  STEP(true),
+  STOP(true),
+  SUB(true),
   THEN(true),
+  TO(true),
 
   // OPERATORS.
   ASTERISK(false),
   EQ(false),
   GT(false),
   GTEQ(false),
+  LPAR(false),
   LT(false),
   LTEQ(false),
   MINUS(false),
   NOTEQ(false),
   PLUS(false),
+  RPAR(false),
   SLASH(false),
 
 }

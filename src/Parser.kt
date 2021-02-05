@@ -81,15 +81,15 @@ class Parser(private val lexer: Lexer) {
       TokenType.FOR -> {
 
         val identifier = identifier()
-        val equals = equals()
+        val equals = eatToken(TokenType.EQ)
         val initialValue = expression()
-        val toToken = toToken()
+        val toToken = eatToken(TokenType.TO)
         val limit = expression()
         var step: Token? = null
         var stepExpression: Expression? = null
 
         if (peekNextToken().tokenType == TokenType.STEP) {
-            step = step()
+            step = eatToken(TokenType.STEP)
             stepExpression = expression()
         }
 
@@ -99,16 +99,17 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.NEXT -> return NextStatement(identifier())
 
-      TokenType.PRINT -> return PrintStatement(stringOrExpression())
+      TokenType.PRINT -> return PrintStatement(expression())
 
-      TokenType.IF -> return IfStatement(comparison(), then(), statement())
+      TokenType.IF -> return IfStatement(comparison(), eatToken(TokenType.THEN) , statement())
 
       TokenType.GO -> return GoStatement(goType(), expression())
 
       TokenType.INPUT -> return InputStatement(identifier())
 
-      TokenType.LET -> return LetStatement(identifier(), equals(), expression())
+      TokenType.LET -> return LetStatement(identifier(), eatToken(TokenType.EQ), expression())
 
+      TokenType.DIM -> return DimStatement(identifier(), eatToken(TokenType.LPAR), dimensions(), eatToken(TokenType.RPAR))
 
       TokenType.RETURN -> return ReturnStatement()
 
@@ -120,6 +121,11 @@ class Parser(private val lexer: Lexer) {
     }
   }
 
+  private fun eatToken(tokenType: TokenType) : Token {
+    matchNext(tokenType)
+    return currentToken
+  }
+
   private fun goType(): Token {
     nextToken()
     if (!arrayOf(TokenType.TO, TokenType.SUB).contains(currentToken.tokenType )) {
@@ -128,22 +134,20 @@ class Parser(private val lexer: Lexer) {
     return currentToken
   }
 
-  private fun toToken() : Token {
-    matchNext(TokenType.TO)
-    return currentToken
-  }
-  private fun step() : Token {
-    matchNext(TokenType.STEP)
-    return currentToken
-  }
-
-  private fun equals() : Token {
-    matchNext(TokenType.EQ)
-    return currentToken
-  }
-  private fun then() : Token {
-    matchNext(TokenType.THEN)
-    return currentToken
+  private fun dimensions(firstDimension: Expression? = null) : List<Expression> {
+    val dimensions = mutableListOf<Expression>()
+    if (firstDimension != null) {
+      // First dimension is given, add it.
+      dimensions.add(firstDimension)
+    } else {
+      // Parse first dimension.
+      dimensions.add(expression())
+    }
+    while (peekNextToken().tokenType == TokenType.COMMA) {
+      nextToken()  // eat comma
+      dimensions.add(expression())
+    }
+    return dimensions
   }
 
   private fun identifier() : Token {
@@ -181,15 +185,6 @@ class Parser(private val lexer: Lexer) {
       }
       else -> Expression(term, null, null)
     }
-  }
-
-  private fun stringOrExpression() : StringOrExpression =
-    when (peekNextToken().tokenType) {
-      TokenType.STRING -> {
-        matchNext(TokenType.STRING)
-        StringOrExpression(string = currentToken.string)
-      }
-      else -> StringOrExpression(expression = expression())
   }
 
 
@@ -230,7 +225,70 @@ class Parser(private val lexer: Lexer) {
       throw ParserException("Expecting either number, variable or string, got: ${currentToken.tokenType}",
         currentToken.line, currentToken.position)
     }
-    return Primary(currentToken)
+
+    // FIXME: can we break his to multiple parsing functions
+    return when (currentToken.tokenType) {
+
+      TokenType.SVAR, TokenType.STRING -> {
+        val id = currentToken
+        // After svar, there's optional slice or index
+        return when (peekNextToken().tokenType) {
+          TokenType.LPAR -> {
+            matchNext(TokenType.LPAR)
+            var left: Expression? = null;
+            if (peekNextToken().tokenType != TokenType.TO) {
+              // Slice without start part.
+              left = expression()
+            }
+
+            when (peekNextToken().tokenType) {
+              TokenType.TO -> {
+                // slice.
+                val to = eatToken(TokenType.TO)
+                var right: Expression? = null
+                if (peekNextToken().tokenType != TokenType.RPAR) {
+                  // No right part.
+                  right = expression()
+                }
+                matchNext(TokenType.RPAR)
+                Primary(id, Slice(left, to, right))
+              }
+              TokenType.COMMA -> {
+                // dim reference.
+                matchNext(TokenType.COMMA)
+                val dimensions = dimensions(left)
+                matchNext(TokenType.RPAR)
+                Primary(id, null, dimensions)
+              }
+              else -> throw ParserException("Invalid token: ${peekNextToken().tokenType}", currentToken.line, currentToken.position)
+            }
+          }
+          else -> {
+            // SVAR
+            Primary(id)
+          }
+        }
+      }
+      TokenType.VAR -> {
+        val id = currentToken
+        when (peekNextToken().tokenType) {
+          TokenType.LPAR -> {
+            matchNext(TokenType.LPAR)
+            // NumericDim reference.
+            val dimensions = dimensions()
+            matchNext(TokenType.RPAR)
+            Primary(id, null, dimensions)
+          }
+          else -> {
+            // Var
+            Primary(id)
+          }
+        }
+      }
+      else -> {
+        return Primary(currentToken)
+      }
+    }
   }
 
   /**
@@ -257,34 +315,23 @@ class Parser(private val lexer: Lexer) {
   data class LetStatement(val identifier: Token,
                           val equals: Token,
                           val expression: Expression) : Statement
-
+  data class DimStatement(val identifier: Token,
+                          val lpar: Token,
+                          val dimensions: List<Expression>,
+                          val rpar: Token) : Statement
   data class InputStatement(val identifier: Token) : Statement
   data class IfStatement(val comparison: Comparison,
                          val then: Token,
                          val thenStatement: Statement) : Statement
-  data class PrintStatement(val stringOrExpression: StringOrExpression) : Statement
+  data class PrintStatement(val expression: Expression) : Statement
 
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression)
-  data class Primary(val token: Token)
+  data class Primary(val token: Token, val slice: Slice? = null, val dimensions: List<Expression>? = null)
+  data class Slice(val start: Expression?, val to: Token, val finish: Expression?)
   data class Unary(val op: Token?, val primary: Primary)
   data class Term(val unary: Unary, val op: Token?, val rUnary: Unary?)
   data class Expression(val term: Term, val op: Token?, val rExpression: Expression?)
-  class StringOrExpression {
-    var string: String? = null
-    var expression: Expression? = null
-
-    constructor(string: String) {
-      this.string = string
-    }
-    constructor(expression: Expression) {
-      this.expression = expression
-    }
-    fun isString() = string != null
-
-    override fun toString() =
-      if (isString()) string!! else expression!!.toString()
-  }
 }
 
 class ParserException(message:String, lineNumber: Int, position: Int) :
