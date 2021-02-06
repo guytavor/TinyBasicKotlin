@@ -86,7 +86,7 @@ class Lexer(private val program: String) {
         return if (keywordToken == null) {
           if (peek() == '$') {
             if (identifier.length != 1) {
-              throw LexerException("String variable can only b 1 char long", currentLine, currentPosInLine)
+              throw LexerException("String variable can only b 1 char long")
             }
             nextChar()  // eat $
             newToken(identifier, TokenType.SVAR)
@@ -115,7 +115,7 @@ class Lexer(private val program: String) {
         return newToken(program.substring(startPos, currentIndex), TokenType.STRING)
       }
 
-      else -> throw LexerException("Unexpected char: $currentChar", currentLine, currentPosInLine)
+      else -> throw LexerException("Unexpected char: $currentChar")
     }
   }
 
@@ -143,6 +143,9 @@ class Lexer(private val program: String) {
       null
     }
   }
+
+  inner class LexerException(message:String) :
+    Exception("Syntax Error line: $currentLine  at: $currentPosInLine: $message")
 
 }
 
@@ -196,8 +199,5 @@ enum class TokenType(val isKeyword: Boolean) {
   SLASH(false),
 
 }
-
-class LexerException(message:String, lineNumber: Int, position: Int) :
-  Exception("Syntax Error line: $lineNumber  at: $position: $message")
 
 

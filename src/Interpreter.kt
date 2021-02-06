@@ -53,7 +53,17 @@ class Interpreter {
       }
 
       is Parser.LetStatement -> {
-        setVar(statement.identifier.string, evaluate(statement.expression))
+
+        with(statement) {
+          when {
+            dimensions != null -> {
+              setDim(identifier.string, dimensions.map { evaluate(it).toInt() }, evaluate(expression))
+            }
+            else -> {
+              setVar(identifier.string, evaluate(expression))
+            }
+          }
+        }
       }
 
       is Parser.DimStatement -> {
@@ -214,6 +224,7 @@ class Interpreter {
               getVar(identifier)
             }
             existDim(identifier) -> {
+              if (dimensions == null) throw InterpreterException("Dim without indexes.")
               val indexes = dimensions!!.map { evaluate(it).toInt() }
               getDim(identifier, indexes)
             }
@@ -314,6 +325,11 @@ class Interpreter {
       ?: throw InterpreterException("Referenced dim $identifier does not exist. use DIM first")
   }
 
+  private fun setDim(identifier: Identifier, indexes: List<Int>, value: Value) {
+    dims[identifier]?.set(indexes, value)
+      ?: throw InterpreterException("Referenced dim $identifier does not exist. use DIM first")
+  }
+
   data class StatementIndex(var lineIndex: Int, var statementInLineIndex: Int = 0)
   data class ForLoopContext(
     val loopStartIndex: StatementIndex,
@@ -337,7 +353,7 @@ class Interpreter {
         numberOfDimensions -> {
           // Set char
           if (value.toString().length != 1) {
-            throw Interpreter().InterpreterException("Expecting a single char, found a string");
+            throw Interpreter().InterpreterException("Expecting a single char, found a string")
           }
           chars[indexes] = value.toString()[0]
         }
