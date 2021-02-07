@@ -1,4 +1,5 @@
 import java.util.*
+import kotlin.math.floor
 
 typealias Identifier = String
 typealias ForLoopIdentifier = Char
@@ -213,20 +214,41 @@ class Interpreter {
     }
   }
 
+  private fun evaluateFunction(name: Token, arguments: List<Parser.Expression>) : Value {
+    return when (name.tokenType) {
+      TokenType.INT -> {
+        throwIncorrectNumberOfArguments(name, arguments, 1)
+        val value = evaluate(arguments[0])
+        Value(floor(value.toDouble()))  // To integer.
+      }
+      else -> {
+        throw InterpreterException("Unknown function: ${name.string}")
+      }
+    }
+  }
+
   private fun evaluate(primary: Parser.Primary): Value {
     with(primary) {
       val identifier = token.string
 
       return when (primary.token.tokenType) {
-        TokenType.VAR, TokenType.SVAR -> {
+        TokenType.VAR, TokenType.SVAR,
+        TokenType.INT -> {
           val value: Value  = when {
             existVar(identifier) -> {
               getVar(identifier)
             }
             existDim(identifier) -> {
-              if (dimensions == null) throw InterpreterException("Dim without indexes.")
-              val indexes = dimensions!!.map { evaluate(it).toInt() }
+              if (expressionList == null) throw InterpreterException("Dim without indexes.")
+              val indexes = expressionList!!.map { evaluate(it).toInt() }
               getDim(identifier, indexes)
+            }
+            token.tokenType.isKeyword -> {
+              // Function.
+              if (expressionList == null) {
+                throw InterpreterException("Function must take arguments, none were specified.")
+              }
+              evaluateFunction(token, expressionList!!)
             }
             else -> {
               throw InterpreterException("No such identifier: $identifier")
@@ -328,6 +350,12 @@ class Interpreter {
   private fun setDim(identifier: Identifier, indexes: List<Int>, value: Value) {
     dims[identifier]?.set(indexes, value)
       ?: throw InterpreterException("Referenced dim $identifier does not exist. use DIM first")
+  }
+
+  private fun throwIncorrectNumberOfArguments(name: Token, arguments: List<Parser.Expression>, num: Int) {
+    if (arguments.size != num) {
+      throw InterpreterException("${name.tokenType} function takes exactly $num argument but ${arguments.size} were given.")
+    }
   }
 
   data class StatementIndex(var lineIndex: Int, var statementInLineIndex: Int = 0)

@@ -1,4 +1,7 @@
 5 REM ***** My Program ****
+3 LET M=3.45
+4 PRINT M
+5 PRINT INT(M)
 10 PRINT "Hello, world!"
 12 LET Apple=7
 15 PRINT 12987*99+15/3

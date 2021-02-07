@@ -250,7 +250,8 @@ class Parser(private val lexer: Lexer) {
     if (currentToken.tokenType != TokenType.VAR
       && currentToken.tokenType != TokenType.NUMBER
       && currentToken.tokenType != TokenType.SVAR
-      && currentToken.tokenType != TokenType.STRING) {
+      && currentToken.tokenType != TokenType.STRING
+      && currentToken.tokenType != TokenType.INT) {
       throw ParserException("Expecting either number, variable or string, got: ${currentToken.tokenType}")
     }
 
@@ -290,15 +291,21 @@ class Parser(private val lexer: Lexer) {
           }
         }
       }
-      TokenType.VAR -> {
+      TokenType.VAR, TokenType.INT -> {
+        // If current is VAR, or a Function
+        // the logic is same.
+        // the identifier (var or function name)
+        // will be followed by an expression list
+        // which represents either optional dimensions list for a var
+        // or mandatory arguments for a function.
         val id = currentToken
         when (peekNextToken().tokenType) {
           TokenType.LPAR -> {
             matchNext(TokenType.LPAR)
-            // NumericDim reference.
-            val dimensions = expressionList()
+            // NumericDim reference, or function arguments
+            val expressions = expressionList()
             matchNext(TokenType.RPAR)
-            Primary(id, dimensions)
+            Primary(id, expressions)
           }
           else -> {
             // Scalar var.
@@ -352,7 +359,7 @@ class Parser(private val lexer: Lexer) {
   class Primary {
     val token: Token
     var slice: Slice? = null
-    var dimensions: List<Expression>? = null
+    var expressionList: List<Expression>? = null
 
     constructor(id: Token) {
       this.token = id
@@ -364,7 +371,7 @@ class Parser(private val lexer: Lexer) {
 
     constructor(id: Token, dimensions: List<Expression>) {
       this.token = id
-      this.dimensions = dimensions
+      this.expressionList = dimensions
     }
   }
   data class Slice(val start: Expression?, val to: Token, val finish: Expression?)

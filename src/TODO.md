@@ -3,7 +3,6 @@ TODO:
 -----
 * expand so we can compile zx spectrum program covert date and pangolin here:
   https://worldofspectrum.org/ZXBasicManual/zxmanappd.html
-  * INT function
   * read/data
   * input label semicolon
   * print semicolon multiple stings

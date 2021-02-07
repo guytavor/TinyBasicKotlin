@@ -172,6 +172,7 @@ enum class TokenType(val isKeyword: Boolean) {
   FOR(true),
   GO(true),
   IF(true),
+  INT(true),
   INPUT(true),
   LET(true),
   NEXT(true),
