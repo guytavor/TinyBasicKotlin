@@ -79,9 +79,27 @@ class Parser(private val lexer: Lexer) {
         return RemStatement()
       }
 
+      TokenType.DATA -> {
+        return DataStatement(currentLineNumber, literalList())
+      }
+
+      TokenType.READ -> {
+        return ReadStatement(variableOrDimNameList())
+      }
+
+      TokenType.RESTORE -> {
+
+        val lineNumber = if (peekNextToken().tokenType == TokenType.NUMBER) {
+          eatToken(TokenType.NUMBER)
+        } else {
+          null
+        }
+        return RestoreStatement(lineNumber)
+      }
+
       TokenType.FOR -> {
 
-        val identifier = identifier()
+        val identifier = variableName()
         val equals = eatToken(TokenType.EQ)
         val initialValue = expression()
         val toToken = eatToken(TokenType.TO)
@@ -98,7 +116,7 @@ class Parser(private val lexer: Lexer) {
           identifier, equals, initialValue, toToken, limit, step, stepExpression)
       }
 
-      TokenType.NEXT -> return NextStatement(identifier())
+      TokenType.NEXT -> return NextStatement(variableName())
 
       TokenType.PRINT -> return PrintStatement(expression())
 
@@ -106,21 +124,13 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.GO -> return GoStatement(goType(), expression())
 
-      TokenType.INPUT -> return InputStatement(identifier())
+      TokenType.INPUT -> return InputStatement(variableName())
 
       TokenType.LET -> {
-        val id = identifier()
-        var dimensions: List<Expression>? = null
-        if (peekNextToken().tokenType == TokenType.LPAR) {
-          // Dim assignment
-          matchNext(TokenType.LPAR)
-          dimensions = expressionList()
-          matchNext(TokenType.RPAR)
-        }
-        return LetStatement(id, dimensions, eatToken(TokenType.EQ), expression())
+        return LetStatement(variableOrDimName(), eatToken(TokenType.EQ), expression())
       }
 
-      TokenType.DIM -> return DimStatement(identifier(), eatToken(TokenType.LPAR), expressionList(), eatToken(TokenType.RPAR))
+      TokenType.DIM -> return DimStatement(variableName(), eatToken(TokenType.LPAR), expressionList(), eatToken(TokenType.RPAR))
 
       TokenType.RETURN -> return ReturnStatement()
 
@@ -130,6 +140,18 @@ class Parser(private val lexer: Lexer) {
         throw ParserException("Unexpected: ${currentToken.string}")
       }
     }
+  }
+
+  private fun variableOrDimName(): VariableOrDimName {
+    val id = variableName()
+    var dimensions: List<Expression>? = null
+    if (peekNextToken().tokenType == TokenType.LPAR) {
+      // Dim name
+      matchNext(TokenType.LPAR)
+      dimensions = expressionList()
+      matchNext(TokenType.RPAR)
+    }
+    return VariableOrDimName(id, dimensions)
   }
 
   private fun eatToken(tokenType: TokenType) : Token {
@@ -143,6 +165,44 @@ class Parser(private val lexer: Lexer) {
       throw ParserException("Expected either TO or SUB after GO")
     }
     return currentToken
+  }
+
+  private fun variableOrDimNameList() : List<VariableOrDimName> {
+    val list = mutableListOf<VariableOrDimName>()
+    // Parse first identifier.
+    list.add(variableOrDimName())
+
+    while (peekNextToken().tokenType == TokenType.COMMA) {
+      nextToken()  // eat comma
+      list.add(variableOrDimName())
+    }
+    return list
+  }
+
+  private fun literalList() : List<Value> {
+    val list = mutableListOf<Value>()
+    // Parse first dimension.
+    list.add(literal())
+    while (peekNextToken().tokenType == TokenType.COMMA) {
+      nextToken()  // eat comma
+      list.add(literal())
+    }
+    return list
+  }
+
+  private fun literal() : Value {
+    nextToken()
+    return when (currentToken.tokenType) {
+      TokenType.STRING -> {
+        Value(currentToken.string)
+      }
+      TokenType.NUMBER -> {
+        Value(currentToken.string.toDouble())
+      }
+      else -> {
+        throw ParserException("Literal expected but found: ${currentToken.tokenType}")
+      }
+    }
   }
 
   private fun expressionList(firstExpression: Expression? = null) : List<Expression> {
@@ -180,10 +240,10 @@ class Parser(private val lexer: Lexer) {
     return Slice(start, to, finish)
   }
 
-  private fun identifier() : Token {
+  private fun variableName() : Token {
     nextToken()
     if (currentToken.tokenType != TokenType.SVAR && currentToken.tokenType != TokenType.VAR) {
-      throw ParserException("Identifier expected. Found ${currentToken.string}")
+      throw ParserException("Scalar Variable Name expected. Found ${currentToken.string}")
     }
     return currentToken
   }
@@ -340,8 +400,7 @@ class Parser(private val lexer: Lexer) {
                           val stepExpression: Expression? = null) : Statement
   data class NextStatement(val identifier: Token) : Statement
   data class GoStatement(val goType: Token, val expression: Expression) : Statement
-  data class LetStatement(val identifier: Token,
-                          val dimensions: List<Expression>?,
+  data class LetStatement(val variableOrDimName: VariableOrDimName,
                           val equals: Token,
                           val expression: Expression) : Statement
   data class DimStatement(val identifier: Token,
@@ -353,6 +412,9 @@ class Parser(private val lexer: Lexer) {
                          val then: Token,
                          val thenStatement: Statement) : Statement
   data class PrintStatement(val expression: Expression) : Statement
+  data class DataStatement(val lineNumber: Int, val data: List<Value>) : Statement
+  data class ReadStatement(val variableOrDimNameList: List<VariableOrDimName>) : Statement
+  data class RestoreStatement(val lineNumber: Token?) : Statement
 
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression)
@@ -378,6 +440,7 @@ class Parser(private val lexer: Lexer) {
   data class Unary(val op: Token?, val primary: Primary)
   data class Term(val unary: Unary, val op: Token?, val rUnary: Unary?)
   data class Expression(val term: Term, val op: Token?, val rExpression: Expression?)
+  data class VariableOrDimName(val identifier: Token, val dimensions: List<Expression>?)
 
   inner class ParserException(message: String) :
     Exception("Error parsing line: $currentLineNumber at: ${currentToken.position}: $message")

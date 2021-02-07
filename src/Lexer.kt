@@ -168,6 +168,7 @@ enum class TokenType(val isKeyword: Boolean) {
   VAR(false),   // Numeric variable
 
   // KEYWORDS.
+  DATA(true),
   DIM(true),
   FOR(true),
   GO(true),
@@ -177,7 +178,9 @@ enum class TokenType(val isKeyword: Boolean) {
   LET(true),
   NEXT(true),
   PRINT(true),
+  READ(true),
   REM(true),
+  RESTORE(true),
   RETURN(true),
   STEP(true),
   STOP(true),

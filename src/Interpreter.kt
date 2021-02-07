@@ -14,16 +14,28 @@ class Interpreter {
   private var numberOfStatementsInCurrentLine = -1
   private var returnAddresses = Stack<StatementIndex>()  // stack of addresses to 'RETURN' to.
   private var forLoops: MutableMap<ForLoopIdentifier, ForLoopContext> = mutableMapOf()
+  private var data = Data()
 
 
   fun run(ast: Parser.AST) {
     this.ast = ast
+    prepareData(ast)
     currentStatementIndex = StatementIndex(0, 0)
     do {
       if (interpretCurrentStatement(ast)) {
         break
       }
     } while (true)
+  }
+
+  private fun prepareData(ast: Parser.AST) {
+    for (line in ast.lines) {
+      for (statement in line.statements) {
+        if (statement is Parser.DataStatement) {
+          data.add(line.lineNumber, statement.data)
+        }
+      }
+    }
   }
 
   private fun interpretCurrentStatement(ast: Parser.AST): Boolean {
@@ -54,16 +66,8 @@ class Interpreter {
       }
 
       is Parser.LetStatement -> {
-
         with(statement) {
-          when {
-            dimensions != null -> {
-              setDim(identifier.string, dimensions.map { evaluate(it).toInt() }, evaluate(expression))
-            }
-            else -> {
-              setVar(identifier.string, evaluate(expression))
-            }
-          }
+          assign(variableOrDimName, evaluate(expression))
         }
       }
 
@@ -80,8 +84,14 @@ class Interpreter {
       }
 
       is Parser.InputStatement -> {
-        val value = readLine()!!
-        setVar(statement.identifier.string, Value(value))
+        val rawValue = readLine()!!
+        // Convert input string to the right VarType
+        val value: Value = if (statement.identifier.tokenType == TokenType.VAR) {
+          Value(rawValue.toDouble())
+        } else {
+          Value(rawValue)
+        }
+        setVar(statement.identifier.string, value)
       }
 
       is Parser.ForStatement -> {
@@ -90,6 +100,25 @@ class Interpreter {
           ForLoopContext(getNextStatementIndex(), statement.stepExpression, statement.limit)
         setVar(identifier.toString(), evaluate(statement.initialValue))
       }
+
+      is Parser.DataStatement -> {
+        // We do nothing.
+        // Data is read before the program is run. see prepareData() method.
+      }
+
+      is Parser.RestoreStatement -> {
+        val lineNumber = if (statement.lineNumber != null) {
+          statement.lineNumber.string.toInt()
+        } else {
+          null
+        }
+        data.restore(lineNumber)
+      }
+
+      is Parser.ReadStatement -> {
+        statement.variableOrDimNameList.forEach { assign(it, data.read())}
+      }
+
     }
 
     // Handle branching and line advancement statements.
@@ -172,6 +201,21 @@ class Interpreter {
       StatementIndex(currentStatementIndex.lineIndex + 1)
     }
 
+
+  private fun assign(variableOrDimName: Parser.VariableOrDimName, value: Value) {
+    when {
+      variableOrDimName.dimensions != null -> {
+        setDim(
+          variableOrDimName.identifier.string,
+          variableOrDimName.dimensions.map { evaluate(it).toInt() },
+          value)
+      }
+      else -> {
+        setVar(variableOrDimName.identifier.string, value)
+      }
+    }
+
+  }
 
   private fun evaluate(comparison: Parser.Comparison): Boolean {
     with(comparison) {
@@ -441,6 +485,30 @@ class Interpreter {
       dim.getOrDefault(indexes, Value(0.0))
 
   }
+
+  inner class Data {
+    private var data: MutableList<Value> = mutableListOf()
+    private var dataRestoreIndexes: MutableMap<Int /* lineNumber*/, Int /* data list index*/> = mutableMapOf()
+    private var dataCurrentReadPoint: Int = 0
+
+    fun add(lineNumber: Int, elements: List<Value>) {
+      dataRestoreIndexes[lineNumber] = data.size
+      data.addAll(elements)
+    }
+
+    fun read() : Value =
+      data[dataCurrentReadPoint++]
+
+    fun restore(givenLineNumber: Int?) {
+      // use the first data on or after the specified lineNumber.
+      // if not specified, jump to start.
+      val lineNumber = givenLineNumber ?: 0
+      val foundLineNumber = dataRestoreIndexes.toSortedMap().keys.first { it >= lineNumber }
+      dataCurrentReadPoint = dataRestoreIndexes[foundLineNumber]
+        ?: throw InterpreterException("Invalid RESTORE line number: $lineNumber")
+    }
+  }
+
 
 
   inner class InterpreterException(message: String) :
