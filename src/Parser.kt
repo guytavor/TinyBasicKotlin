@@ -38,6 +38,20 @@ class Parser(private val lexer: Lexer) {
     lookAhead = if (lexer.hasToken()) lexer.nextToken() else Token("", TokenType.EOF, 0, 0)
   }
 
+  private fun eatToken(tokenType: TokenType) : Token {
+    matchNext(tokenType)
+    return currentToken
+  }
+
+  private fun eatOneOf(tokenTypeArray: Array<TokenType>) : Token {
+    nextToken()
+    if (currentToken.tokenType !in tokenTypeArray) {
+      throw ParserException("Expected one of ${tokenTypeArray.joinToString("," )}," +
+          " found: ${currentToken.tokenType}")
+    }
+    return currentToken
+  }
+
   private fun peekNextToken() : Token = lookAhead
 
 
@@ -124,7 +138,26 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.GO -> return GoStatement(goType(), expression())
 
-      TokenType.INPUT -> return InputStatement(variableName())
+      TokenType.INPUT -> {
+        val inputRequests: MutableList<InputRequest> = mutableListOf()
+        do {
+          if (peekNextToken().tokenType == TokenType.COMMA) {
+            eatToken(TokenType.COMMA)
+          }
+          var prompt: String? = null
+          var separator: Token? = null
+
+          if (peekNextToken().tokenType == TokenType.STRING) {
+            nextToken()
+            prompt = currentToken.string
+            separator = eatOneOf(arrayOf(TokenType.SEMICOLON, TokenType.COMMA))
+          }
+          val variable = variableOrDimName()
+          inputRequests.add(InputRequest(prompt, separator, variable))
+        } while (peekNextToken().tokenType == TokenType.COMMA)
+
+        return InputStatement(inputRequests)
+      }
 
       TokenType.LET -> {
         return LetStatement(variableOrDimName(), eatToken(TokenType.EQ), expression())
@@ -152,11 +185,6 @@ class Parser(private val lexer: Lexer) {
       matchNext(TokenType.RPAR)
     }
     return VariableOrDimName(id, dimensions)
-  }
-
-  private fun eatToken(tokenType: TokenType) : Token {
-    matchNext(tokenType)
-    return currentToken
   }
 
   private fun goType(): Token {
@@ -407,7 +435,7 @@ class Parser(private val lexer: Lexer) {
                           val lpar: Token,
                           val dimensions: List<Expression>,
                           val rpar: Token) : Statement
-  data class InputStatement(val identifier: Token) : Statement
+  data class InputStatement(val inputRequests: List<InputRequest>) : Statement
   data class IfStatement(val comparison: Comparison,
                          val then: Token,
                          val thenStatement: Statement) : Statement
@@ -415,7 +443,7 @@ class Parser(private val lexer: Lexer) {
   data class DataStatement(val lineNumber: Int, val data: List<Value>) : Statement
   data class ReadStatement(val variableOrDimNameList: List<VariableOrDimName>) : Statement
   data class RestoreStatement(val lineNumber: Token?) : Statement
-
+  data class InputRequest(val prompt: String?, val separator: Token?, val variableOrDimName: VariableOrDimName)
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression)
   class Primary {

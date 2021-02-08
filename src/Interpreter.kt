@@ -84,14 +84,26 @@ class Interpreter {
       }
 
       is Parser.InputStatement -> {
-        val rawValue = readLine()!!
-        // Convert input string to the right VarType
-        val value: Value = if (statement.identifier.tokenType == TokenType.VAR) {
-          Value(rawValue.toDouble())
-        } else {
-          Value(rawValue)
+
+        for (inputRequest in statement.inputRequests) {
+          if (inputRequest.prompt != null) {
+            val nl = if (inputRequest.separator!!.tokenType == TokenType.SEMICOLON) {
+              ""
+            } else {
+              "\n"
+            }
+            print(inputRequest.prompt + nl)
+          }
+          val rawValue = readLine()!!
+
+          // Convert input string to the right VarType
+          val value: Value = if (inputRequest.variableOrDimName.identifier.tokenType == TokenType.VAR) {
+            Value(rawValue.toDouble())
+          } else {
+            Value(rawValue)
+          }
+          setVar(inputRequest.variableOrDimName.identifier.string, value)
         }
-        setVar(statement.identifier.string, value)
       }
 
       is Parser.ForStatement -> {

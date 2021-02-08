@@ -15,7 +15,7 @@ fun main(args: Array<String>) {
     println("Usage: TinyBasic <filename>")
     exitProcess(1)
   }
-  val program = File(args[0]).readText()
+  val program = File(args[0]).readText().trim().plus('\n')
 
   val lexer = Lexer(program)
   val ast = Parser(lexer).parseProgram()

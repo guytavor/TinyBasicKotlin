@@ -30,6 +30,7 @@ class Lexer(private val program: String) {
     when (currentChar) {
 
       '\n' -> return newToken("\n", TokenType.NEWLINE)
+      ';' -> return newToken(";", TokenType.SEMICOLON)
       '(' -> return newToken("(", TokenType.LPAR)
       ')' -> return newToken(")", TokenType.RPAR)
       ':' -> return newToken(":", TokenType.COLON)
@@ -163,6 +164,7 @@ enum class TokenType(val isKeyword: Boolean) {
   EOF(false),
   NEWLINE(false),
   NUMBER(false),
+  SEMICOLON(false),
   STRING(false),
   SVAR(false),  // String variable
   VAR(false),   // Numeric variable
