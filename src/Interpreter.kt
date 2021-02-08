@@ -55,8 +55,17 @@ class Interpreter {
     when (statement) {
 
       is Parser.PrintStatement -> {
-        // if value is integral, don't print ".0" at the end.
-        println(evaluate(statement.expression).toString().removeSuffix(".0"))
+        if (statement.printTerms.isEmpty()) {
+          println()
+        } else {
+          for (printTerm in statement.printTerms) {
+            // if value is integral, don't print ".0" at the end.
+            print(evaluate(printTerm.expression).toString().removeSuffix(".0"))
+            if (printTerm.separator?.tokenType != TokenType.SEMICOLON) {
+              println()
+            }
+          }
+        }
       }
 
       is Parser.IfStatement -> {
@@ -85,7 +94,7 @@ class Interpreter {
 
       is Parser.InputStatement -> {
 
-        for (inputRequest in statement.inputRequests) {
+        for (inputRequest in statement.inputTerms) {
           if (inputRequest.prompt != null) {
             val nl = if (inputRequest.separator!!.tokenType == TokenType.SEMICOLON) {
               ""
@@ -349,7 +358,7 @@ class Interpreter {
         if (value.type != VarType.NUMERIC) {
           throw InterpreterException("Unary minus is not defined for string value")
         }
-        Value(value.toDouble() * -1)
+        return Value(value.toDouble() * -1)
       }
       return value
     }

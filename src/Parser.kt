@@ -43,6 +43,21 @@ class Parser(private val lexer: Lexer) {
     return currentToken
   }
 
+  private fun maybeEatToken(tokenType: TokenType) : Token? =
+    if (peekNextToken().tokenType == tokenType) {
+      eatToken(tokenType)
+    } else {
+      null
+    }
+
+  private fun maybeEatOneOf(tokenTypeArray: Array<TokenType>): Token? =
+    if (peekNextToken().tokenType in tokenTypeArray) {
+      nextToken()
+      currentToken
+    } else {
+      null
+    }
+
   private fun eatOneOf(tokenTypeArray: Array<TokenType>) : Token {
     nextToken()
     if (currentToken.tokenType !in tokenTypeArray) {
@@ -74,9 +89,7 @@ class Parser(private val lexer: Lexer) {
     do {
       val statement = statement()
       statements.add(statement)
-      if (peekNextToken().tokenType == TokenType.COLON) {
-        nextToken()  // eat colon.
-      }
+      maybeEatToken(TokenType.COLON)
     }
     while (peekNextToken().tokenType != TokenType.NEWLINE)
     return statements
@@ -103,11 +116,7 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.RESTORE -> {
 
-        val lineNumber = if (peekNextToken().tokenType == TokenType.NUMBER) {
-          eatToken(TokenType.NUMBER)
-        } else {
-          null
-        }
+        val lineNumber = maybeEatToken(TokenType.NUMBER)
         return RestoreStatement(lineNumber)
       }
 
@@ -118,12 +127,11 @@ class Parser(private val lexer: Lexer) {
         val initialValue = expression()
         val toToken = eatToken(TokenType.TO)
         val limit = expression()
-        var step: Token? = null
         var stepExpression: Expression? = null
 
-        if (peekNextToken().tokenType == TokenType.STEP) {
-            step = eatToken(TokenType.STEP)
-            stepExpression = expression()
+        val step: Token? = maybeEatToken(TokenType.STEP)
+        if (step != null) {
+          stepExpression = expression()
         }
 
         return ForStatement(
@@ -132,18 +140,26 @@ class Parser(private val lexer: Lexer) {
 
       TokenType.NEXT -> return NextStatement(variableName())
 
-      TokenType.PRINT -> return PrintStatement(expression())
+      TokenType.PRINT -> {
+        val printTerms: MutableList<PrintTerm> = mutableListOf()
+
+        val validSeparators = arrayOf(TokenType.SEMICOLON, TokenType.COMMA)
+        while (peekNextToken().tokenType !in arrayOf(TokenType.COLON, TokenType.NEWLINE)) {
+          printTerms.add(
+            PrintTerm(expression(), maybeEatOneOf(validSeparators))
+          )
+        }
+        return PrintStatement(printTerms)
+      }
 
       TokenType.IF -> return IfStatement(comparison(), eatToken(TokenType.THEN) , statement())
 
       TokenType.GO -> return GoStatement(goType(), expression())
 
       TokenType.INPUT -> {
-        val inputRequests: MutableList<InputRequest> = mutableListOf()
+        val inputTerms: MutableList<InputTerm> = mutableListOf()
         do {
-          if (peekNextToken().tokenType == TokenType.COMMA) {
-            eatToken(TokenType.COMMA)
-          }
+          maybeEatToken(TokenType.COMMA)
           var prompt: String? = null
           var separator: Token? = null
 
@@ -153,17 +169,21 @@ class Parser(private val lexer: Lexer) {
             separator = eatOneOf(arrayOf(TokenType.SEMICOLON, TokenType.COMMA))
           }
           val variable = variableOrDimName()
-          inputRequests.add(InputRequest(prompt, separator, variable))
+          inputTerms.add(InputTerm(prompt, separator, variable))
         } while (peekNextToken().tokenType == TokenType.COMMA)
 
-        return InputStatement(inputRequests)
+        return InputStatement(inputTerms)
       }
 
       TokenType.LET -> {
         return LetStatement(variableOrDimName(), eatToken(TokenType.EQ), expression())
       }
 
-      TokenType.DIM -> return DimStatement(variableName(), eatToken(TokenType.LPAR), expressionList(), eatToken(TokenType.RPAR))
+      TokenType.DIM -> return DimStatement(
+        variableName(),
+        eatToken(TokenType.LPAR),
+        expressionList(),
+        eatToken(TokenType.RPAR))
 
       TokenType.RETURN -> return ReturnStatement()
 
@@ -204,6 +224,7 @@ class Parser(private val lexer: Lexer) {
       nextToken()  // eat comma
       list.add(variableOrDimName())
     }
+
     return list
   }
 
@@ -435,15 +456,16 @@ class Parser(private val lexer: Lexer) {
                           val lpar: Token,
                           val dimensions: List<Expression>,
                           val rpar: Token) : Statement
-  data class InputStatement(val inputRequests: List<InputRequest>) : Statement
+  data class InputStatement(val inputTerms: List<InputTerm>) : Statement
   data class IfStatement(val comparison: Comparison,
                          val then: Token,
                          val thenStatement: Statement) : Statement
-  data class PrintStatement(val expression: Expression) : Statement
+  data class PrintStatement(val printTerms: List<PrintTerm>) : Statement
   data class DataStatement(val lineNumber: Int, val data: List<Value>) : Statement
   data class ReadStatement(val variableOrDimNameList: List<VariableOrDimName>) : Statement
   data class RestoreStatement(val lineNumber: Token?) : Statement
-  data class InputRequest(val prompt: String?, val separator: Token?, val variableOrDimName: VariableOrDimName)
+  data class InputTerm(val prompt: String?, val separator: Token?, val variableOrDimName: VariableOrDimName)
+  data class PrintTerm(val expression: Expression, val separator: Token?)
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression)
   class Primary {
@@ -474,4 +496,3 @@ class Parser(private val lexer: Lexer) {
     Exception("Error parsing line: $currentLineNumber at: ${currentToken.position}: $message")
 
 }
-
