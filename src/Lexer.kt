@@ -38,7 +38,7 @@ class Lexer(private val program: String) {
       '*' -> return newToken("*",  TokenType.ASTERISK)
       '/' -> return newToken("/",  TokenType.SLASH)
       '+' -> return newToken("+",  TokenType.PLUS)
-      '-' -> return newToken("+",  TokenType.MINUS)
+      '-' -> return newToken("-",  TokenType.MINUS)
       '=' -> return newToken("=",  TokenType.EQ)
       '>' -> {
         return if (peek() == '=') {
