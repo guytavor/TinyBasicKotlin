@@ -485,6 +485,11 @@ class Parser(private val lexer: Lexer) {
       this.token = id
       this.expressionList = dimensions
     }
+
+    override fun toString(): String {
+      return "Primary(token=$token, slice=$slice, expressionList=${expressionList?.joinToString(",")})"
+    }
+
   }
   data class Slice(val start: Expression?, val to: Token, val finish: Expression?)
   data class Unary(val op: Token?, val primary: Primary)

@@ -1,3 +1,9 @@
+1 DIM a$(4,4)
+2 LET a$(1)="guy"
+3 PRINT a$(1);"X" : REM   "guy X"
+4 PRINT a$(2,2);"X" : REM " X"
+5 PRINT a$(3);"X" : REM   "    X"
+6 STOP
 10 REM *** DIMS ***
 20 DIM Apple(10,10)
 35 LET x=12

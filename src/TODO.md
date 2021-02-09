@@ -3,7 +3,7 @@ TODO:
 -----
 * expand so we can compile zx spectrum program covert date and pangolin here:
   https://worldofspectrum.org/ZXBasicManual/zxmanappd.html
-  * print semicolon multiple stings
+  * dim does not work well: it should fill dimension with space or 0
   * add parenthesis to expressions
 
   * Parser: slice eats its rpar, expressionlist does not. what's the correct?

@@ -1,5 +1,6 @@
 import java.util.*
 import kotlin.math.floor
+import kotlin.system.exitProcess
 
 typealias Identifier = String
 typealias ForLoopIdentifier = Char
@@ -17,15 +18,20 @@ class Interpreter {
   private var data = Data()
 
 
-  fun run(ast: Parser.AST) {
+  fun run(ast: Parser.AST, debug: Boolean = false) {
+    val debugger = Debugger()
     this.ast = ast
     prepareData(ast)
     currentStatementIndex = StatementIndex(0, 0)
     do {
-      if (interpretCurrentStatement(ast)) {
-        break
+
+      val shouldStop = interpretCurrentStatement(ast)
+
+      if (!shouldStop && debug) {
+        debugger.prompt()
       }
-    } while (true)
+
+    } while (!shouldStop)
   }
 
   private fun prepareData(ast: Parser.AST) {
@@ -70,7 +76,15 @@ class Interpreter {
 
       is Parser.IfStatement -> {
         if (evaluate(statement.comparison)) {
+          // Evaluate the "then" clause.
           return interpret(statement.thenStatement, ast)
+          // interpretation will continue in the next statement,
+          // i.e. whatever after a colon after the THEN statement.
+        } else {
+          // If the comparison condition is false, go to next *line*.
+          // so the optional COLON statements after the THEN statement are skipped.
+          currentStatementIndex = StatementIndex(currentStatementIndex.lineIndex + 1)
+          return false
         }
       }
 
@@ -172,7 +186,7 @@ class Interpreter {
 
           TokenType.TO -> {
             val targetLineNumber = evaluate(statement.expression).toInt()
-            currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(targetLineNumber))
+            currentStatementIndex = StatementIndex(getLineIndexByLineNumber(targetLineNumber))
           }
 
           TokenType.SUB -> {
@@ -182,7 +196,7 @@ class Interpreter {
 
             // Jump to gosub target.
             val lineNumber = evaluate(statement.expression).toInt()
-            currentStatementIndex = StatementIndex(getLineIndexByLineNumberOrDie(lineNumber))
+            currentStatementIndex = StatementIndex(getLineIndexByLineNumber(lineNumber))
           }
 
           else -> {
@@ -366,27 +380,31 @@ class Interpreter {
 
   private fun evaluate(term: Parser.Term): Value {
     with(term) {
-      var value = evaluate(unary)
+      val value = evaluate(unary)
       if (op != null) {
         if (value.type != VarType.NUMERIC) {
           throw InterpreterException("* and / are not defined on string values")
         }
-        value = Value(
-          value.toDouble() * if (op.tokenType == TokenType.ASTERISK) {
-            evaluate(rUnary!!).toDouble()
-          } else {
-            (1 / evaluate(rUnary!!).toDouble())
+        return when (op.tokenType) {
+          TokenType.ASTERISK -> {
+            Value(value.toDouble() * evaluate(rUnary!!).toDouble())
           }
-        )
+          TokenType.SLASH -> {
+            Value(value.toDouble() / evaluate(rUnary!!).toDouble())
+          }
+          else -> {
+            throw InterpreterException("Invalid operator: ${op.tokenType}")
+          }
+        }
       }
       return value
     }
   }
 
-  private fun getLineIndexByLineNumberOrDie(lineNumber: Int): Int {
-    for (i in 0..ast.lines.size) {
-      if (ast.lines.elementAt(i).lineNumber == lineNumber) {
-        return i
+  private fun getLineIndexByLineNumber(lineNumber: Int): Int {
+      for (i in 0..ast.lines.size) {
+        if (ast.lines.elementAt(i).lineNumber >= lineNumber) {
+          return i
       }
     }
     throw InterpreterException("Line number: $lineNumber not found")
@@ -436,7 +454,7 @@ class Interpreter {
     fun get(indexes: List<Int>): Value
   }
 
-  internal class StringDim(dimensions: List<Int>) : Dim {
+  internal class StringDim(private val dimensions: List<Int>) : Dim {
     // We store as a sparse list of indexes pointing to chars.
     private var chars = mutableMapOf<List<Int>, Char>()
     private val numberOfDimensions = dimensions.size
@@ -467,7 +485,7 @@ class Interpreter {
       return when (indexes.size) {
         numberOfDimensions -> {
           // Get char
-          Value(chars.getOrDefault(indexes, "").toString())
+          Value(chars.getOrDefault(indexes, " ").toString())
         }
         numberOfDimensions - 1 -> {
           // Get String.
@@ -478,7 +496,7 @@ class Interpreter {
             val char = get(indexes.plus(i)).toString()
             builder.append(char)
             i += 1
-          } while (char.isNotEmpty())
+          } while (i <= dimensions[numberOfDimensions - 1])
 
           Value(builder.toString())
         }
@@ -487,6 +505,13 @@ class Interpreter {
         }
       }
     }
+
+    override fun toString(): String {
+      val string = StringBuilder()
+      chars.forEach { string.append("${it.key.joinToString(",")} = ${it.value}\n")}
+      return string.toString()
+    }
+
   }
 
   class NumericDim(dimensions: List<Int>) : Dim {
@@ -504,6 +529,12 @@ class Interpreter {
 
     override fun get(indexes: List<Int>): Value =
       dim.getOrDefault(indexes, Value(0.0))
+
+    override fun toString(): String {
+      val string = StringBuilder()
+      dim.forEach { string.append("${it.key.joinToString(",")} = ${it.value}\n")}
+      return string.toString()
+    }
 
   }
 
@@ -534,6 +565,77 @@ class Interpreter {
 
   inner class InterpreterException(message: String) :
     Exception("Runtime error: Line $currentLineNumber. ERROR: $message")
+
+  inner class Debugger {
+
+    private val breakpoints: MutableSet<Int> = mutableSetOf()
+    private var isStepping = true
+
+    fun prompt() {
+      val currentStatement = ast.lines.elementAt(currentStatementIndex.lineIndex).statements[currentStatementIndex.statementInLineIndex]
+      println("$currentLineNumber $currentStatement")
+
+      while (isStepping || breakpoints.contains(currentLineNumber)) {
+        isStepping = true // if we reached a breakpoint, we start stepping.
+        print("debug> ")
+        val input = readLine() ?: ""
+        val tokens = input.split(" ")
+        when (tokens[0]) {
+          "h", "?", "help" -> {
+            println("""
+              Available commands:
+                n|next                 step to next statement
+                m|mem                  show memory contents
+                r|run                  run program (until end or hitting a breakpoint)
+                sb|break <line#>       set a breakpoint at the given line number
+                rb|removebreak <line#> remove the breakpoint at the given line number
+                q|quit                 quit program
+                
+            """.trimIndent())
+          }
+          "n", "next" -> {
+            // return control to interpreter's main loop to execute next statement.
+            return
+          }
+          "m", "mem" -> {
+            dumpMemory()
+          }
+          "r", "run" -> {
+            // stop stepping. run until next breakpoint reached
+            isStepping = false
+          }
+          "q", "quit" -> {
+            exitProcess(1)
+          }
+          "sb", "break" -> {
+            breakpoints.add(tokens[1].toInt())
+          }
+          "rb", "removebreak" -> {
+            breakpoints.remove(tokens[1].toInt())
+          }
+          else -> {
+            println("Unknown command.")
+          }
+        }
+      }
+    }
+
+
+    private fun dumpMemory() {
+      println("Variables")
+      println("---------")
+      variables.forEach { println("${it.key} = ${it.value}") }
+
+      println("Dims")
+      println("---------")
+      dims.forEach {
+        val varTypePostfix = if (it.value is StringDim) { "$" } else { "" }
+        println("${it.key}$varTypePostfix = \n${it.value}\n")
+      }
+
+    }
+
+  }
 
 }
 
