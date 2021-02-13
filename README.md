@@ -1,31 +1,20 @@
-TinyBasic Interpreter
+~~TinyBasic Interpreter~~
 -----------------------
+ZX Basic Spectrum Interpreter (sort of) 🌈
+---------------------------------------
 
 This was written as an exercise of manually writing TinyBasic interpreter.
 ...and to work on my kotlin skills.
 
-Here is the supported syntax in BNF form, adapted from wikipedia: https://en.wikipedia.org/wiki/Tiny_BASIC
+While working on the interpreter, I came by the ["Basic Programming"](http://zxnext.narod.ru/manuals/Basic_Programming.pdf) book
+which I had growing up learning basic for my ZX Spectrum 48k.
 
-    line ::= number statement (: statement) NL
-    statement ::=
-      PRINT (string | expression)
-      IF comparison THEN statement
-      GOTO expression
-      INPUT var
-      LET var = expression
-      GOSUB expression
-      RETURN
-      END
-    var ::= A | B | C ... | Y | Z
-    comparison ::= expression (("==" | "<>" | ">" | ">=" | "<" | "<=") expression)+
-    expression ::= term {( "-" | "+" ) term}
-    term ::= unary {( "/" | "*" ) unary}
-    unary ::= ["+" | "-"] primary
-    primary ::= number | ident
+I implemented the rest of the basic needed for running the coolest program in this book:
+Date to Day.
 
-Some notes:
-* Variables can only contain integer values, not strings.
-* There is only integer values, not decimal values
-
-In was written in a few hours, with help from:
+The first TinyBasic version was written in a few hours, with help from:
 https://web.eecs.utk.edu/~azh/blog/teenytinycompiler1.html
+
+The ZXSpectrum work was a bit more time-consuming.
+
+But I did it. It turns out that  I was born on a Saturday.
