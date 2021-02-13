@@ -33,9 +33,10 @@ class Parser(private val lexer: Lexer) {
     }
   }
 
-  private fun nextToken() {
+  private fun nextToken() : Token {
     currentToken = lookAhead
     lookAhead = if (lexer.hasToken()) lexer.nextToken() else Token("", TokenType.EOF, 0, 0)
+    return currentToken
   }
 
   private fun eatToken(tokenType: TokenType) : Token {
@@ -311,35 +312,23 @@ class Parser(private val lexer: Lexer) {
 
   private fun expression() : Expression {
     val term = term()
-    val op: Token?
-    val rExpression: Expression?
+    val terms: MutableList<OperatorAndTerm> = mutableListOf()
 
-    return when (peekNextToken().tokenType) {
-      TokenType.PLUS, TokenType.MINUS -> {
-        nextToken()
-        op = currentToken
-        rExpression = expression()
-        Expression(term, op, rExpression)
-      }
-      else -> Expression(term, null, null)
+    while (peekNextToken().tokenType in arrayOf(TokenType.PLUS, TokenType.MINUS)) {
+      terms.add(OperatorAndTerm(nextToken(), term()))
     }
+    return Expression(term, terms)
   }
 
 
   private fun term() : Term {
     val unary = unary()
-    val op: Token?
-    val rUnary:  Unary?
+    val unaries: MutableList<OperatorAndUnary> = mutableListOf()
 
-    return when (peekNextToken().tokenType) {
-      TokenType.ASTERISK, TokenType.SLASH -> {
-        nextToken()
-        op = currentToken
-        rUnary = unary()
-        Term(unary, op, rUnary)
-      }
-      else -> Term(unary, null, null)
+    while (peekNextToken().tokenType in arrayOf(TokenType.ASTERISK, TokenType.SLASH)) {
+      unaries.add(OperatorAndUnary(nextToken(), unary()))
     }
+    return Term(unary, unaries)
   }
 
   private fun unary() : Unary {
@@ -468,6 +457,11 @@ class Parser(private val lexer: Lexer) {
   data class PrintTerm(val expression: Expression, val separator: Token?)
 
   data class Comparison(val lExpression: Expression, val relop: Token, val rExpression: Expression)
+  data class Expression(val term: Term, val terms: List<OperatorAndTerm>)
+  data class OperatorAndTerm(val op: Token, val term: Term)
+  data class Term(val unary: Unary, val unaries: List<OperatorAndUnary>)
+  data class OperatorAndUnary(val op: Token, val unary: Unary)
+  data class Unary(val op: Token?, val primary: Primary)
   class Primary {
     val token: Token
     var slice: Slice? = null
@@ -492,9 +486,7 @@ class Parser(private val lexer: Lexer) {
 
   }
   data class Slice(val start: Expression?, val to: Token, val finish: Expression?)
-  data class Unary(val op: Token?, val primary: Primary)
-  data class Term(val unary: Unary, val op: Token?, val rUnary: Unary?)
-  data class Expression(val term: Term, val op: Token?, val rExpression: Expression?)
+
   data class VariableOrDimName(val identifier: Token, val dimensions: List<Expression>?)
 
   inner class ParserException(message: String) :

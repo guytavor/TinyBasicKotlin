@@ -273,19 +273,19 @@ class Interpreter {
   private fun evaluate(expression: Parser.Expression): Value {
     with(expression) {
       var value = evaluate(term)
-      if (op != null && rExpression != null) {
-        value = when (op.tokenType) {
+      for (operatorAndTerm in terms) {
+        value = when (operatorAndTerm.op.tokenType) {
           TokenType.PLUS -> {
-            value + evaluate(rExpression)
+            value + evaluate(operatorAndTerm.term)
           }  // string or double
           TokenType.MINUS -> {
             if (value.type == VarType.STRING) {
               throw InterpreterException("Minus is not defined for strings")
             }
-            Value(value.toDouble() - evaluate(rExpression).toDouble())
+            Value(value.toDouble() - evaluate(operatorAndTerm.term).toDouble())
           }
           else -> {
-            throw InterpreterException("Undefined operator: ${op.string}")
+            throw InterpreterException("Undefined operator: ${operatorAndTerm.op.string}")
           }
         }
       }
@@ -381,21 +381,27 @@ class Interpreter {
   private fun evaluate(term: Parser.Term): Value {
     with(term) {
       val value = evaluate(unary)
-      if (op != null) {
+      if (unaries.isNotEmpty()) {
+        // Multiple *,/ Terms, they all need to be numeric.
         if (value.type != VarType.NUMERIC) {
           throw InterpreterException("* and / are not defined on string values")
         }
-        return when (op.tokenType) {
-          TokenType.ASTERISK -> {
-            Value(value.toDouble() * evaluate(rUnary!!).toDouble())
+        var result = value.toDouble()
+        for (operatorAndUnary in unaries) {
+          result = when (operatorAndUnary.op.tokenType) {
+            TokenType.ASTERISK -> {
+              result * evaluate(operatorAndUnary.unary).toDouble()
+            }
+            TokenType.SLASH -> {
+              result / evaluate(operatorAndUnary.unary).toDouble()
+            }
+            else -> {
+              throw InterpreterException("Invalid operator: ${operatorAndUnary.op.tokenType}")
+            }
           }
-          TokenType.SLASH -> {
-            Value(value.toDouble() / evaluate(rUnary!!).toDouble())
-          }
-          else -> {
-            throw InterpreterException("Invalid operator: ${op.tokenType}")
-          }
+
         }
+        return Value(result)
       }
       return value
     }
