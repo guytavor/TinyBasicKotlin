@@ -1,6 +1,6 @@
 ~~TinyBasic Interpreter~~
 -----------------------
-ZX Basic Spectrum Interpreter (sort of) 🌈
+ZX Spectrum Basic Interpreter (sort of) 🌈
 ---------------------------------------
 
 This was written as an exercise of manually writing an interpreter.
