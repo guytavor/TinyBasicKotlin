@@ -170,6 +170,7 @@ enum class TokenType(val isKeyword: Boolean) {
   VAR(false),   // Numeric variable
 
   // KEYWORDS.
+  CLS(true),
   DATA(true),
   DIM(true),
   FOR(true),

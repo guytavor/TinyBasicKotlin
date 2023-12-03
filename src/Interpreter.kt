@@ -141,6 +141,13 @@ class Interpreter {
         // Data is read before the program is run. see prepareData() method.
       }
 
+      is Parser.ClsStatement -> {
+        // TODO: Use ANSI console codes for CLS. for now we just clear the screen by scrolling the screen height (24 rows)
+        for (i in 1..24) {
+          println()
+        }
+      }
+
       is Parser.RestoreStatement -> {
         val lineNumber = if (statement.lineNumber != null) {
           statement.lineNumber.string.toInt()
